@@ -1,0 +1,205 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)\r\n"
+    "#ifdef _WIN32\r\n"
+    "LANGUAGE 9, 1\r\n"
+    "#pragma code_page(1252)\r\n"
+    "#endif //_WIN32\r\n"
+    "#include ""res\\ExtIODll.rc2""  // non-Microsoft Visual C++ edited resources\r\n"
+    "#include ""afxres.rc""         // Standard components\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x2L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "Comments", "Created by Andrus Aaslaid (ES1UVB)"
+            VALUE "CompanyName", "UVB-76.net"
+            VALUE "FileDescription", "ExtIO DLL Example with MCF GUI"
+            VALUE "FileVersion", "1, 0, 0, 1"
+            VALUE "InternalName", "ExtIODll"
+            VALUE "LegalCopyright", "Copyright (C) 2011"
+            VALUE "OriginalFilename", "ExtIO_SDR_MK1.DLL"
+            VALUE "ProductName", "Winrad/HDSDR ExtIO Dynamic Link Library Example for MS VC2008 with MFC GUI"
+            VALUE "ProductVersion", "1, 0, 0, 1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_DIALOG1 DIALOGEX 0, 0, 296, 338
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "SDR MK1.5 'Andrus' ExtIO DLL Window"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    COMBOBOX        IDC_COMBO1,17,18,144,30,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "",IDC_SLIDER5,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,197,30,77,15
+    CONTROL         "ExtIO DLL I/Q Souce",IDC_CHECK1,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,23,42,82,10
+    CONTROL         "",IDC_SLIDER1,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,175,60,100,15
+    CONTROL         "",IDC_SLIDER2,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,175,79,100,15
+    CONTROL         "",IDC_SLIDER3,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,21,149,250,15
+    CONTROL         "",IDC_SLIDER4,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,21,176,250,15
+    DEFPUSHBUTTON   "OK",IDOK,231,308,50,14
+    LTEXT           "Transparency",IDC_STATIC_TEST,201,19,45,8
+    LTEXT           "Uses LayeredWindowHelper class by Davide Calabro.",IDC_STATIC,18,278,171,8
+    LTEXT           "See LayeredWindowHelperST.h for license details.",IDC_STATIC,18,289,162,8
+    LTEXT           "SDR MK1.5 'Andrus' ExtIO DLL by Andrus Aaslaid (ES1UVB)",IDC_STATIC,75,246,189,8
+    LTEXT           "http://uvb-76.net",IDC_STATIC,75,255,58,8
+    CONTROL         5003,IDC_STATIC,"Static",SS_BITMAP,19,206,44,61
+    LTEXT           "COM Port",IDC_STATIC,17,7,32,8
+    LTEXT           "Gain A",IDC_STATIC,149,65,22,8
+    LTEXT           "Gain B",IDC_STATIC,149,82,21,8
+    LTEXT           "COM Ports enumeration class by Jochen Arndt.",IDC_STATIC,18,305,152,8
+    LTEXT           "Licensed as The Code Project Open License (CPOL)",IDC_STATIC,18,315,164,8
+    LTEXT           "Phase A Coarse",IDC_STATIC,25,142,52,8
+    LTEXT           "Phase A Fine",IDC_STATIC,25,169,42,8
+    EDITTEXT        IDC_EDIT1,225,193,40,14,ES_AUTOHSCROLL | WS_DISABLED | NOT WS_BORDER | NOT WS_TABSTOP
+    LTEXT           "Ch A Phase:",IDC_STATIC,183,193,43,8
+    EDITTEXT        IDC_EDIT2,103,42,55,14,ES_RIGHT | ES_AUTOHSCROLL | WS_DISABLED | NOT WS_BORDER | NOT WS_TABSTOP
+    LTEXT           "Radio FW Ver.",IDC_STATIC_FWVER,76,209,188,8
+    LTEXT           "ExtIO DLL Ver.",IDC_STATIC_EXTIOVER,76,218,60,8
+    CONTROL         "A / AB Audio",IDC_RADIO_CMODE1,"Button",BS_AUTORADIOBUTTON | WS_GROUP,69,66,56,10
+    CONTROL         "B",IDC_RADIO_CMODE2,"Button",BS_AUTORADIOBUTTON,69,77,20,10
+    CONTROL         "A+ B",IDC_RADIO_CMODE3,"Button",BS_AUTORADIOBUTTON,69,88,32,10
+    CONTROL         "A - B",IDC_RADIO_CMODE4,"Button",BS_AUTORADIOBUTTON,69,99,31,10
+    CONTROL         "B - A",IDC_RADIO_CMODE5,"Button",BS_AUTORADIOBUTTON,69,110,31,10
+    GROUPBOX        "Channel",IDC_STATIC,24,60,109,62
+    CONTROL         "Sync Gain",IDC_CHECK2,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,149,101,47,10
+    CONTROL         "Sync Tuning",IDC_CHECK3,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,149,114,55,10
+    LTEXT           "0",IDC_STATIC,18,151,8,8
+    RTEXT           "0.0",IDC_STATIC,7,177,13,8
+    LTEXT           "359",IDC_STATIC,272,150,17,8
+    LTEXT           "1.0",IDC_STATIC,271,177,18,8
+    CONTROL         "Show Debug Console",IDC_CHECK4,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,191,228,89,10
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO 
+BEGIN
+    IDD_DIALOG1, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 289
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 331
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Bitmap
+//
+
+IDB_BITMAP1             BITMAP                  "extio_small.bmp"
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE 9, 1
+#pragma code_page(1252)
+#endif //_WIN32
+#include "res\ExtIODll.rc2"  // non-Microsoft Visual C++ edited resources
+#include "afxres.rc"         // Standard components
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+
