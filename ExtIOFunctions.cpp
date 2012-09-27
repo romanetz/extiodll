@@ -49,6 +49,8 @@
 					how to correctly feed data with extio callback ..
 	18.09.2012	-	Switched over to 230kHz family of sample rates
 				-	Created logic for LO drag-alone when frequency is approaching LO bounds
+	27.09.2012	-	Added libusb version check on startup at InitHW()
+				-	Added libusb driver and dll version info to DLL screen
 
 
 	To Do:
@@ -158,7 +160,8 @@ int DebugConsole;
 extern volatile bool update_phaseA;
 extern volatile bool update_gain;
 
-usb_dev_handle *dev = NULL;			// device handle to be used by libusb
+usb_dev_handle *dev = NULL;					// device handle to be used by libusb
+const struct usb_version* libver = NULL;	// libusb version information
 //char tmp[128];
 
 /*
@@ -290,6 +293,7 @@ extern "C" bool __stdcall InitHW(char *name, char *model, int& type)
 //static bool first = true;
 char errstring[128];
 int consoletransparency;
+unsigned long long libvernum;
 
 	DebugConsole=AfxGetApp()->GetProfileInt(_T("Config"), _T("DebugConsole"), 0);
 	Transparency = AfxGetApp()->GetProfileInt(_T("Config"), _T("Transparency"), -1);
@@ -404,6 +408,35 @@ int consoletransparency;
 		////////////
 		// init libusb 		
 		usb_init();			// initialize the library 
+
+		libver=usb_get_version();
+
+		if (libver)
+		{
+			// for easy comparision, lets build a number out of versions! xxx.xxx.xxx.xxx
+			libvernum=(libver->dll.major*1000000000)+(libver->dll.minor*1000000)+(libver->dll.micro*1000)+libver->dll.nano;
+			if (libvernum < ((LIB_MIN_MAJOR*1000000000)+(LIB_MIN_MINOR*1000000)+(LIB_MIN_MICRO*1000)+LIB_MIN_NANO))
+			{
+				sprintf_s(errstring, 128, "Incompatible LibUSB-win32 DLL: v%d.%d.%d.%d (Minimum Required: v%d.%d.%d.%d)",
+						libver->dll.major, libver->dll.minor, libver->dll.micro, libver->dll.nano,
+						LIB_MIN_MAJOR, LIB_MIN_MINOR, LIB_MIN_MICRO, LIB_MIN_NANO);
+				AfxMessageBox(errstring, MB_ICONEXCLAMATION);	
+			}
+
+			libvernum=(libver->driver.major*1000000000)+(libver->driver.minor*1000000)+(libver->driver.micro*1000)+libver->driver.nano;
+			if (libvernum < ((LIB_MIN_MAJOR*1000000000)+(LIB_MIN_MINOR*1000000)+(LIB_MIN_MICRO*1000)+LIB_MIN_NANO))
+			{
+				sprintf_s(errstring, 128, "Incompatible LibUSB-win32 Driver: v%d.%d.%d.%d (Minimum Required: v%d.%d.%d.%d)",
+						libver->driver.major, libver->driver.minor, libver->driver.micro, libver->driver.nano,
+						LIB_MIN_MAJOR, LIB_MIN_MINOR, LIB_MIN_MICRO, LIB_MIN_NANO);
+				AfxMessageBox(errstring, MB_ICONEXCLAMATION);	
+			}
+		}
+		else
+		{
+			AfxMessageBox("Unable to Fetch LibUSB-win32 Version Information!", MB_ICONEXCLAMATION);
+		}
+
 		usb_find_busses();	// find all busses
 		usb_find_devices(); // find all connected devices
 			

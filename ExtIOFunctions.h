@@ -31,10 +31,15 @@
 extern void (* ExtIOCallback)(int, int, float, void *);
 
 #define DLLVER_MAJOR	1
-#define DLLVER_MINOR	2
+#define DLLVER_MINOR	21
 
 #define MIN_FW_MAJOR	1
 #define MIN_FW_MINOR	70
+
+#define LIB_MIN_MAJOR	1
+#define LIB_MIN_MINOR	2
+#define LIB_MIN_MICRO	6
+#define LIB_MIN_NANO	0
 
 extern volatile bool do_datatask;
 extern volatile bool datatask_done;

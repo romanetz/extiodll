@@ -120,8 +120,8 @@ BEGIN
     LTEXT           "Transparency",IDC_STATIC_TEST,201,19,45,8
     LTEXT           "Uses LayeredWindowHelper class by Davide Calabro.",IDC_STATIC,18,278,171,8
     LTEXT           "See LayeredWindowHelperST.h for license details.",IDC_STATIC,18,289,162,8
-    LTEXT           "SDR MK1.5 'Andrus' ExtIO DLL by Andrus Aaslaid (ES1UVB)",IDC_STATIC,75,246,189,8
-    LTEXT           "http://uvb-76.net",IDC_STATIC,75,255,58,8
+    LTEXT           "SDR MK1.5 'Andrus' ExtIO DLL by Andrus Aaslaid (ES1UVB)",IDC_STATIC,75,254,189,8
+    LTEXT           "http://uvb-76.net",IDC_STATIC,75,263,58,8
     CONTROL         5003,IDC_STATIC,"Static",SS_BITMAP,19,206,44,61
     LTEXT           "COM Port",IDC_STATIC,17,7,32,8
     LTEXT           "Gain A",IDC_STATIC,149,65,22,8
@@ -133,8 +133,8 @@ BEGIN
     EDITTEXT        IDC_EDIT1,225,193,40,14,ES_AUTOHSCROLL | WS_DISABLED | NOT WS_BORDER | NOT WS_TABSTOP
     LTEXT           "Ch A Phase:",IDC_STATIC,183,193,43,8
     EDITTEXT        IDC_EDIT2,103,42,55,14,ES_RIGHT | ES_AUTOHSCROLL | WS_DISABLED | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT           "Radio FW Ver.",IDC_STATIC_FWVER,76,209,188,8
-    LTEXT           "ExtIO DLL Ver.",IDC_STATIC_EXTIOVER,76,218,60,8
+    LTEXT           "Radio FW Ver.",IDC_STATIC_FWVER,75,214,188,8
+    LTEXT           "ExtIO DLL Ver.",IDC_STATIC_EXTIOVER,75,223,60,8
     CONTROL         "A / AB Audio",IDC_RADIO_CMODE1,"Button",BS_AUTORADIOBUTTON | WS_GROUP,69,66,56,10
     CONTROL         "B",IDC_RADIO_CMODE2,"Button",BS_AUTORADIOBUTTON,69,77,20,10
     CONTROL         "A+ B",IDC_RADIO_CMODE3,"Button",BS_AUTORADIOBUTTON,69,88,32,10
@@ -147,7 +147,8 @@ BEGIN
     RTEXT           "0.0",IDC_STATIC,7,177,13,8
     LTEXT           "359",IDC_STATIC,272,150,17,8
     LTEXT           "1.0",IDC_STATIC,271,177,18,8
-    CONTROL         "Show Debug Console",IDC_CHECK4,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,191,228,89,10
+    CONTROL         "Show Debug Console",IDC_CHECK4,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,200,272,89,10
+    LTEXT           "LibUSB DLL Version Driver Version",IDC_STATIC_LIBUSBVER,75,232,193,8
 END
 
 
