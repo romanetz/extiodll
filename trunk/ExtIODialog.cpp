@@ -45,6 +45,8 @@ extern int GainA, GainB;
 extern int PhaseCoarse, PhaseFine;
 extern int DebugConsole;
 
+extern const struct usb_version* libver;
+
 // CExtIODialog dialog
 
 IMPLEMENT_DYNAMIC(CExtIODialog, CDialog)
@@ -206,6 +208,17 @@ int hardwaretype;
 		sprintf_s(verinfo, 128, "Radio FW  V%d.%d", fw_major, fw_minor);
 	}
 	GetDlgItem(IDC_STATIC_FWVER)->SendMessage(WM_SETTEXT, 0, (LPARAM)verinfo);
+
+	if (libver)
+	{
+		sprintf_s(verinfo, 128, "LibUSB-win32 DLL:%d.%d.%d.%d  Driver:%d.%d.%d.%d", 
+						libver->dll.major, libver->dll.minor, libver->dll.micro, libver->dll.nano, 
+						libver->driver.major, libver->driver.minor, libver->driver.micro, libver->driver.nano);
+	}
+	else
+		sprintf_s(verinfo, 128, "No LibUSB-win32 Version Info");
+
+	GetDlgItem(IDC_STATIC_LIBUSBVER)->SendMessage(WM_SETTEXT, 0, (LPARAM)verinfo);
 
 	m_nChannelMode=AfxGetApp()->GetProfileInt(_T("Config"), _T("ChannelMode"), 0);
 

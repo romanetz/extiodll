@@ -24,6 +24,7 @@
 #define IDC_CHECK2                      5021
 #define IDC_CHECK3                      5022
 #define IDC_CHECK4                      5023
+#define IDC_STATIC_LIBUSBVER            5024
 
 // Next default values for new objects
 // 
@@ -31,7 +32,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        5004
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         5024
+#define _APS_NEXT_CONTROL_VALUE         5025
 #define _APS_NEXT_SYMED_VALUE           5009
 #endif
 #endif
