@@ -59,6 +59,10 @@
 						-	Slightly restructured thread invoking
 						-	Changed default transparency setting to 90% opaque
 
+	v1.23	05.10.2012	-	Fixed ugly bug what left hardware LO unchanged when the displayed LO was
+							changed due required boundaries change
+
+
 	To Do:
 
 		- Make diversity mode work so that both channels could be tweaked, so will get 2x360deg span
@@ -1148,10 +1152,11 @@ unsigned long increment;
 				lo_freq-=(increment);
 
 			tune_freq=freq;
-			_cprintf("callback!\n");
+			_cprintf("callback 101 requested!\n");
 			(*ExtIOCallback)(-1, 101, 0, NULL);		// indicate (and perform on radio) LO frequency change	
 			//(*ExtIOCallback)(-1, 105, 0, NULL);		// change tune back to where it was (this will not execute TuneChanged() agin)
 			do_callback105=true;		// if we execute it here, the gui will not be updated, so ask datatask to do that
+			update_lo=true;				// ask datatask to update HW LO
 		}
 
 	} 
@@ -1161,10 +1166,11 @@ unsigned long increment;
 		{	
 			lo_freq+=(increment);
 			tune_freq=freq;
-			_cprintf("callback!\n");
+			_cprintf("callback 101 requested!\n");
 			(*ExtIOCallback)(-1, 101, 0, NULL);		// indicate (and perform on radio) LO frequency change	
 			//(*ExtIOCallback)(-1, 105, 0, NULL);		// change tune back to where it was (this will not execute TuneChanged() agin)
 			do_callback105=true;		// if we execute it here, the gui will not be updated, so ask datatask to do that
+			update_lo=true;				// ask datatask to update HW LO
 		}
 	}
 	
@@ -1297,7 +1303,6 @@ It has no return value.
 extern "C" void __stdcall RawDataReady(long samprate, int *Ldata, int *Rdata, int numsamples)
 {
 	// data statistics and quality analysis can be done here, as well as some crude AGC if needed.
-	// not implemented as of now.
 
 	return;
 }

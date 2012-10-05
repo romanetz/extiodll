@@ -31,7 +31,7 @@
 extern void (* ExtIOCallback)(int, int, float, void *);
 
 #define DLLVER_MAJOR	1
-#define DLLVER_MINOR	22
+#define DLLVER_MINOR	23
 
 #define MIN_FW_MAJOR	1
 #define MIN_FW_MINOR	70
