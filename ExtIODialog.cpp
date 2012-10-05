@@ -114,7 +114,7 @@ int hardwaretype;
 	m_Layered.AddLayeredStyle(m_hWnd);
 	
 	if ((Transparency == -1)||(Transparency == 0))
-		Transparency=70;
+		Transparency=DEFAULTTRANSPARENCY;
 	m_Layered.SetTransparentPercentage(m_hWnd, Transparency);
 
 	//Work on COM ports combo box

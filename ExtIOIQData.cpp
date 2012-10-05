@@ -164,6 +164,7 @@ char tmp[128];
 	iqdata_wptr=0;
 	buffer_filled=false;
 
+/*
 	if (do_datatask)
 	{	
 		_cprintf("libusb started successfully (0x%04X:0x%04X_%02d)\n", SDR_VID, SDR_PID, SDR_BULKIF);
@@ -172,6 +173,7 @@ char tmp[128];
 	}
 	else
 		do_callbacktask=false;
+*/
 
 	// reset whatever is going on at the endpoint
 	usb_clear_halt(dev, SDREP_IN);
@@ -255,7 +257,7 @@ char tmp[128];
 		{
 			for (i=0; i<(unsigned int)ret; i++)
 			{
-				SDRData[(sdr_wptr+i)&DATAMASK]=tmpData[i];		// somewhat slow but straightforward, as memmove() will likely not roll over at 64K				
+				SDRData[(sdr_wptr+i)&DATAMASK]=tmpData[i];		// somewhat slow but straightforward, as memmove() will likely not roll over at 64K								
 			}
 			
 			EnterCriticalSection(&CriticalSection);
@@ -533,16 +535,14 @@ char tmp[128];
 void ExtIOCallbackTask(void* dummy)
 {
 HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
-double nextpass;
+//double nextpass;
 int cachedblocks, iqdata_wptr;
 unsigned long sdr_wptr_local;
 
 	EnterCriticalSection(&CriticalSection);
 		threadcount++;
 		callbacktask_running=true;
-	LeaveCriticalSection(&CriticalSection);
-
-	
+	LeaveCriticalSection(&CriticalSection);	
 	
 	_cprintf("ExtIOCallbackTask() thread started\n");
 	
@@ -556,15 +556,19 @@ unsigned long sdr_wptr_local;
 		WaitForSingleObject(sleepevent, 0);					// give away timeslice	
 	}
 
-	nextpass=GetTickCount();	// start counting time
+	//nextpass=GetTickCount();	// start counting time
 
 	while((do_callbacktask)&&(!globalshutdown))
-	{
-		if ((cachedblocks < WINRAD2CACHE) || (nextpass <= GetTickCount()))
+	{		
+		// Oddly enough, if we are measuring time ourselves and just give time away with WaitForSingleObject(xx, 0)
+		// the CPU gets 100% utilization. So we are now using WaitForSingleObject() for timings.
+
+		//if ((cachedblocks < WINRAD2CACHE) || (nextpass <= GetTickCount()))
 		{
+			
 			EnterCriticalSection(&CriticalSection);
 			sdr_wptr_local=sdr_wptr;					// copy current write offset from data pump task
-			LeaveCriticalSection(&CriticalSection);
+			LeaveCriticalSection(&CriticalSection);			
 
 			//fill IQ data buffer 
 			if (iqdata_wptr < SDRIQDATASIZE)
@@ -588,17 +592,20 @@ unsigned long sdr_wptr_local;
 					cachedblocks++;
 					_cprintf("^");
 				}
-				else
-					nextpass+=callbackinterval;						// get time for next pass
-			}
+				//else
+				//	nextpass+=callbackinterval;						// get time for next pass
+			}						
 		}
-
+		
 		if ((!fifo_loaded)&&(cachedblocks == WINRAD2CACHE))
 		{
 			fifo_loaded=true;			
 		}
-
-		WaitForSingleObject(sleepevent, 0);					// give away timeslice
+		
+		if (!fifo_loaded)
+			WaitForSingleObject(sleepevent, 0);					// give away timeslice
+		else
+			WaitForSingleObject(sleepevent, callbackinterval);
 	}
 
 	EnterCriticalSection(&CriticalSection);

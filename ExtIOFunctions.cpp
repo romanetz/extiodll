@@ -38,20 +38,26 @@
 
 	Revision History:
 
-	30.05.2011	-	Initial 
-	29.08.2011	-	Added Graphical interface and console window to example
-	23.04.2012	-	Removed all extra stuff to strip it down to pure MFC GUI example
-	24.04.2012	-	Cleaned up for public release
+			30.05.2011	-	Initial 
+			29.08.2011	-	Added Graphical interface and console window to example
+			23.04.2012	-	Removed all extra stuff to strip it down to pure MFC GUI example
+			24.04.2012	-	Cleaned up for public release
 
-	08.09.2012	-	Replaced About information credits about Winrad according to what LC from hdsdr.de suggested
-				-	Started to implement libusb functionality
-	16.09.2012	-	libusb data transfer at 192kHz works!! Was "only" one week steady head-banging to figure out
-					how to correctly feed data with extio callback ..
-	18.09.2012	-	Switched over to 230kHz family of sample rates
-				-	Created logic for LO drag-alone when frequency is approaching LO bounds
-	27.09.2012	-	Added libusb version check on startup at InitHW()
-				-	Added libusb driver and dll version info to DLL screen
+			08.09.2012	-	Replaced About information credits about Winrad according to what LC from hdsdr.de 
+							suggested
+						-	Started to implement libusb functionality
+			16.09.2012	-	libusb data transfer at 192kHz works!! Was "only" one week steady head-banging to 
+							figure out
+							how to correctly feed data with extio callback ..
+			18.09.2012	-	Switched over to 230kHz family of sample rates
+						-	Created logic for LO drag-alone when frequency is approaching LO bounds
+	v1.21	27.09.2012	-	Added libusb version check on startup at InitHW()
+						-	Added libusb driver and dll version info to DLL screen
 
+	v1.22	05.10.2012	-	Fixed WaitForSingleObject() issue what caused 100% utilization for one CPU core
+							(ID_ JBJ01) (Thanx to Mario from hdsdr.de!)
+						-	Slightly restructured thread invoking
+						-	Changed default transparency setting to 90% opaque
 
 	To Do:
 
@@ -89,6 +95,7 @@ static char THIS_FILE[]=__FILE__;
 
 
 void ExtIODataTask(void* dummy);
+void ExtIOCallbackTask(void* dummy);
 
 /*
 
@@ -124,6 +131,7 @@ volatile bool libusb_ok=false;
 int HWType;
 
 volatile bool do_datatask = false;			// indicator that the datatask must be run
+extern volatile bool do_callbacktask;
 volatile bool datatask_running = false;		// indicator that we are actually inside the data task
 volatile bool datatask_done = false;		// will be set at exit to true to indicate that task has left a building
 volatile bool lo_changed = false;
@@ -301,7 +309,7 @@ unsigned long long libvernum;
 	consoletransparency=Transparency;
 
 	if (consoletransparency == -1)
-		consoletransparency = 70;
+		consoletransparency = DEFAULTTRANSPARENCY;
 
 	//--------------
 	// Create console. This is convenient for _cprintf() debugging, but as we will 
@@ -591,10 +599,12 @@ char modetmp[16];
 		
 
 		do_datatask=true;
+		do_callbacktask=true;
 		//libusb_ok=true;
 		fifo_loaded=false;
 
-		_beginthread(ExtIODataTask, 0, NULL);
+		_beginthread(ExtIOCallbackTask, 0, NULL);
+		_beginthread(ExtIODataTask, 0, NULL);		
 
 		// Wait for fifo to be filled with data before returning to program
 		while(!globalshutdown)
