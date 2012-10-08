@@ -61,6 +61,9 @@
 
 	v1.23	05.10.2012	-	Fixed ugly bug what left hardware LO unchanged when the displayed LO was
 							changed due required boundaries change
+			==== The chase for interrupted audio on some platforms (regardless of speed or number of cores) ====
+	v1.24	08.10.2012	-	Improved/more precise ExtIOCallbackTask() timing
+						-	Some of the waiting time excluded from loops
 
 
 	To Do:
