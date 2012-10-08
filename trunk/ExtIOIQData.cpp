@@ -15,7 +15,7 @@ void (* ExtIOCallback)(int, int, float, void *) = NULL;
 
 #define DATAMASK	0x3FFFF
 // note the triple buffering here. 
-unsigned char tmpData[30*1024];			//Bulk RX buffer. Keep huge to allow USB receive loop to fetch whatever is there, so radio side of USB can transmit as fast as it could!
+unsigned char tmpData[60*1024];			//Bulk RX buffer. Keep huge to allow USB receive loop to fetch whatever is there, so radio side of USB can transmit as fast as it could!
 										//this buffer will be copied off immediately after bulk receive function returns. Note, that it has to be less than int/2
 										//as we are indexing it with signed int and cant get negative idx
 unsigned char SDRData[DATAMASK+1];		//this buffer is where we copy the tmpData to after each rx attempt. Note, that it is exactly an int long, so 
@@ -259,9 +259,9 @@ char tmp[128];
 			{
 				SDRData[(sdr_wptr+i)&DATAMASK]=tmpData[i];		// somewhat slow but straightforward, as memmove() will likely not roll over at 64K								
 			}
-			
-			EnterCriticalSection(&CriticalSection);
-					sdr_wptr+=ret;								// copy current write offset from data pump task
+
+			EnterCriticalSection(&CriticalSection);		
+				sdr_wptr+=ret;								// copy current write offset from data pump task
 			LeaveCriticalSection(&CriticalSection);
 
 			totalbytes+=ret;	
@@ -339,7 +339,7 @@ char tmp[128];
 			lasttotalbytes=0;
 		}		
 
-		WaitForSingleObject(sleepevent, 0);		// give away timeslice		
+		//WaitForSingleObject(sleepevent, 0);		// give away timeslice		
 
 		if (/*((ChannelMode == CHMODE_A)&&(lastlo_freqA != lo_freq)) ||
 			((ChannelMode == CHMODE_B)&&(lastlo_freqB != lo_freq)) ||
@@ -535,7 +535,7 @@ char tmp[128];
 void ExtIOCallbackTask(void* dummy)
 {
 HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
-//double nextpass;
+double nextpass;
 int cachedblocks, iqdata_wptr;
 unsigned long sdr_wptr_local;
 
@@ -556,7 +556,7 @@ unsigned long sdr_wptr_local;
 		WaitForSingleObject(sleepevent, 0);					// give away timeslice	
 	}
 
-	//nextpass=GetTickCount();	// start counting time
+	nextpass=GetTickCount();	// start counting time
 
 	while((do_callbacktask)&&(!globalshutdown))
 	{		
@@ -578,7 +578,7 @@ unsigned long sdr_wptr_local;
 					IQData[iqdata_wptr]=SDRData[sdr_readptr&DATAMASK];		// note, that as sdr_rptr was initialized to -1, we must increment it _before_ usage.
 					sdr_readptr++;
 					iqdata_wptr++;
-					WaitForSingleObject(sleepevent, 0);					// give away timeslice	
+					//WaitForSingleObject(sleepevent, 0);					// give away timeslice	
 				}
 			}
 
@@ -605,7 +605,12 @@ unsigned long sdr_wptr_local;
 		if (!fifo_loaded)
 			WaitForSingleObject(sleepevent, 0);					// give away timeslice
 		else
-			WaitForSingleObject(sleepevent, callbackinterval);
+		{
+			// just waiting by callbackinterval ms will give improper timing, as
+			// our time granularity is around 55ms in windows and we may end up starving
+			nextpass+=callbackinterval;
+			WaitForSingleObject(sleepevent, max(0, (nextpass-GetTickCount())));
+		}
 	}
 
 	EnterCriticalSection(&CriticalSection);
