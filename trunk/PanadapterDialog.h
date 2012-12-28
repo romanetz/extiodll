@@ -1,24 +1,35 @@
 #pragma once
 #include "LayeredWindowHelperST\LayeredWindowHelperST.h"
-#include "SelectComPort\ComPortCombo.h"
+#include "resource.h"		//oddly, if this is not included, the IDD_DIALOG2 is not visible, although it should be
+//#include "SelectComPort\ComPortCombo.h"
 #include "DialogClasses.h"
+#include "RangeSlider.h"
 
 // CExtIODialog dialog
 
 #define ID_CLOCK_TIMER	1
 
-class CExtIODialog : public CDialog
+class CPanadapterDialog : public CDialog
 {
-	DECLARE_DYNAMIC(CExtIODialog)
+	DECLARE_DYNAMIC(CPanadapterDialog)
 
 public:
-	CExtIODialog(CWnd* pParent = NULL);   // standard constructor
-	virtual ~CExtIODialog();
+	CPanadapterDialog(CWnd* pParent = NULL);   // standard constructor
+	virtual ~CPanadapterDialog();
 
-	void ChangeMode(unsigned long lofreq, unsigned long tunefreq);
+	CRangeSlider c_FreqRangeSlider;
+	CRangeSlider c_ColorRangeSlider;
+
+
+
+	HMODULE hParent;
+
+	//void filterfft(float* fftpool, int fftbands);
+
+//	void ChangeMode(unsigned long lofreq, unsigned long tunefreq);
 
 // Dialog Data
-	enum { IDD = IDD_DIALOG1 };
+	enum { IDD = IDD_DIALOG2 };
 
 protected:
 	// Generated message map functions
@@ -26,11 +37,21 @@ protected:
 	virtual BOOL OnInitDialog();
 	virtual void PostNcDestroy();
 	afx_msg void OnClose();
-	afx_msg BOOL OnDeviceChange(UINT nEventType, DWORD_PTR dwData);
+	//afx_msg BOOL OnDeviceChange(UINT nEventType, DWORD_PTR dwData);
 	//}}AFX_MSG
 
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
 
+	CSpeedSlider m_SpeedSlider;
+	CRangeInfo m_RangeInfo;
+	CActiveInfo m_ActiveInfo;
+
+	LRESULT OnRangeChange(WPARAM  wParam, LPARAM /* lParam */);
+	void OnTimer(UINT nIDEvent);
+	//void OnPaint();
+	BOOL OnEraseBkgnd(CDC* pDC2erase);
+	void OnLButtonDown(UINT nFlags, CPoint point);
+/*
 	CComPortCombo m_comboPorts;
 	CGainSliderCHA m_GainSliderA;
 	CGainSliderCHB m_GainSliderB;
@@ -44,18 +65,19 @@ protected:
 	CCheckBoxDllIQ m_DllIQ;	
 	CDataRateInfo m_DataRateInfo;
 	CCheckBoxDebugConsole m_DebugConsoleCheck;
-	CButton1 m_Button1;
-	
+*/	
 	DECLARE_MESSAGE_MAP()
 
 public:
-	int m_nChannelMode;
-	afx_msg void OnBnClickedOk();
+//	int m_nChannelMode;
+//	afx_msg void OnBnClickedOk();
 
 private:
 	CLayeredWindowHelperST	m_Layered;
 
 public:
+	afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
+	/*
 	afx_msg void OnCbnSelchangeCombo1();
 	afx_msg void OnBnClickedCheck1();
 	afx_msg void OnBnClickedCheck2();
@@ -71,4 +93,5 @@ public:
 	afx_msg void OnBnClickedRadioCmode6();
 	afx_msg void OnBnClickedRadioCmode7();
 	afx_msg void OnBnClickedButton1();
+	*/
 };

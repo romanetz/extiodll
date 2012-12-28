@@ -31,15 +31,21 @@
 extern void (* ExtIOCallback)(int, int, float, void *);
 
 #define DLLVER_MAJOR	1
-#define DLLVER_MINOR	24
+#define DLLVER_MINOR	30
 
 #define MIN_FW_MAJOR	1
 #define MIN_FW_MINOR	70
+
+#define MIN_FW_MAJOR_PAN	1
+#define MIN_FW_MINOR_PAN	93		// minimum version needed to run panadapter
 
 #define LIB_MIN_MAJOR	1
 #define LIB_MIN_MINOR	2
 #define LIB_MIN_MICRO	6
 #define LIB_MIN_NANO	0
+
+#define DATAMASK	0x3FFFF
+#define PANDATAMASK	0x3FFFF
 
 #define	DEFAULTTRANSPARENCY	90
 
@@ -58,6 +64,7 @@ extern int HWType;
 
 #define IQSAMPLERATE_FULL		231884 //234432	//192000
 #define IQSAMPLERATE_DIVERSITY	187683
+#define IQSAMPLERATE_PANADAPTER	96000
 #define IQSAMPLERATE_AUDIO		48000
 
 #define SDRIQDATASIZE	2048	// this is minimum for 16 bit, as at least 512 IQ pqirs have to be transmitted once
@@ -92,18 +99,21 @@ extern int HWType;
 #define		LIBUSB_GETVER			21
 #define		LIBUSB_SETGAIN			22
 #define		LIBUSB_SETPHASE			23
+#define		LIBUSB_PANTABLE			24
 
 #define		LIBUSB_CHA			0
 #define		LIBUSB_CHB			1
 
-// LIBUSB_MODE flags
+// LIBUSB_MODE flags. Keep in sync with radio buttons! (stored in ChannelMode variable)
 
 #define		LIBMODE_16A			0
 #define		LIBMODE_16B			1
 #define		LIBMODE_16APB		2
 #define		LIBMODE_16AMB		3
 #define		LIBMODE_16BMA		4
-#define		LIBMODE_16AB		5
+#define		LIBMODE_16ABPAN		5	//A, B=panscan
+#define		LIBMODE_16BAPAN		6	//A=panscan, B
+#define		LIBMODE_16AB		7
 
 #define		LIBMODE_OFF			10
 #define		LIBMODE_SPEEDTEST	11
@@ -116,10 +126,25 @@ extern int HWType;
 
 // Channel mode radio button states
 
-#define		CHMODE_A		0
-#define		CHMODE_B		1
-#define		CHMODE_APB		2		// A+B
-#define		CHMODE_AMB		3		// A-B
-#define		CHMODE_BMA		4		// B-A
+#define		CHMODE_A		LIBMODE_16A
+#define		CHMODE_B		LIBMODE_16B
+#define		CHMODE_APB		LIBMODE_16APB		// A+B
+#define		CHMODE_AMB		LIBMODE_16AMB		// A-B
+#define		CHMODE_BMA		LIBMODE_16BMA		// B-A
+#define		CHMODE_ABPAN	LIBMODE_16ABPAN		// A, B=panscan
+#define		CHMODE_BAPAN	LIBMODE_16BAPAN		// A=panscan, B
+
+
+// structure for running the panoramic scan by
+typedef struct
+{
+	DWORD	startfreq;	// boundary frequency start (Hz)
+	DWORD	samples;	// how many samples to fetch (note, that this is only indicative -- the actual sample count varies (is somewhat higher), since we can not guarantee that good latency.
+							// Parsing on the host side has to go always by magic word, NOT by counting samples.
+	DWORD	stepfreq;	// frequency increment (Hz)
+	DWORD	steps;		// how many steps to increment before going to next table entry
+	WORD	magic_I;	// magic token - if three consecutive I and Q pairs are equal to these values, it indicates the beginning of the panoramic packet of particular kind
+	WORD	magic_Q;
+} PANENTRY;
 
 #endif // !defined(AFX_EXTIOCLASS_H__247C1094_0293_40d5_846A_6CC900C82E80__INCLUDED_)

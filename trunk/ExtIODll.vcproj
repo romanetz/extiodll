@@ -222,11 +222,11 @@
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
 			<File
-				RelativePath=".\ExtIODialog.cpp"
+				RelativePath=".\DialogClasses.cpp"
 				>
 			</File>
 			<File
-				RelativePath=".\ExtIODialogClasses.cpp"
+				RelativePath=".\ExtIODialog.cpp"
 				>
 			</File>
 			<File
@@ -278,6 +278,34 @@
 				>
 			</File>
 			<File
+				RelativePath=".\Fourier.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\Fourier.h"
+				>
+			</File>
+			<File
+				RelativePath=".\MemDC.h"
+				>
+			</File>
+			<File
+				RelativePath=".\PanadapterDialog.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\PanadapterDialog.h"
+				>
+			</File>
+			<File
+				RelativePath=".\RangeSlider.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\RangeSlider.h"
+				>
+			</File>
+			<File
 				RelativePath="StdAfx.cpp"
 				>
 				<FileConfiguration
@@ -305,11 +333,11 @@
 			Filter="h;hpp;hxx;hm;inl"
 			>
 			<File
-				RelativePath=".\ExtIODialog.h"
+				RelativePath=".\DialogClasses.h"
 				>
 			</File>
 			<File
-				RelativePath=".\ExtIODialogClasses.h"
+				RelativePath=".\ExtIODialog.h"
 				>
 			</File>
 			<File
@@ -333,6 +361,10 @@
 			Name="Resource Files"
 			Filter="ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe"
 			>
+			<File
+				RelativePath=".\bitmap2.bmp"
+				>
+			</File>
 			<File
 				RelativePath=".\extio_small.bmp"
 				>
