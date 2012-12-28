@@ -8,8 +8,9 @@
 #include "serial\serial.h"
 #include "libusb\lusb0_usb.h"
 #include "ExtIOFunctions.h"
+#include "PanadapterDialog.h"
 
-#include <Dbt.h>				// Equates for WM_DEVICECHANGE and BroadcastSystemMessage
+#include <Dbt.h>				// Equates for WM_DEVICECHANGE and BroadcastSystemMessagewaitforsinglr
 #include <conio.h>				// gives _cprintf()
 
 extern CSerial serial;
@@ -47,6 +48,8 @@ extern int DebugConsole;
 
 extern const struct usb_version* libver;
 
+CPanadapterDialog* m_pmodelessPanadapter = NULL;
+
 // CExtIODialog dialog
 
 IMPLEMENT_DYNAMIC(CExtIODialog, CDialog)
@@ -77,11 +80,13 @@ void CExtIODialog::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_CHECK2, m_SyncGainCheck);
 	DDX_Control(pDX, IDC_CHECK3, m_SyncTuneCheck);
 	DDX_Control(pDX, IDC_CHECK4, m_DebugConsoleCheck);
+	DDX_Control(pDX, IDC_BUTTON1, m_Button1);
 }
 
 
 BEGIN_MESSAGE_MAP(CExtIODialog, CDialog)
 	ON_BN_CLICKED(IDOK, &CExtIODialog::OnBnClickedOk)
+	ON_BN_CLICKED(IDC_BUTTON1, &CExtIODialog::OnBnClickedButton1)
 	ON_WM_DEVICECHANGE()
 	ON_CBN_SELCHANGE(IDC_COMBO1, &CExtIODialog::OnCbnSelchangeCombo1)
 	ON_BN_CLICKED(IDC_CHECK1, &CExtIODialog::OnBnClickedCheck1)
@@ -95,6 +100,8 @@ BEGIN_MESSAGE_MAP(CExtIODialog, CDialog)
 	ON_BN_CLICKED(IDC_RADIO_CMODE3, &CExtIODialog::OnBnClickedRadioCmode3)
 	ON_BN_CLICKED(IDC_RADIO_CMODE4, &CExtIODialog::OnBnClickedRadioCmode4)
 	ON_BN_CLICKED(IDC_RADIO_CMODE5, &CExtIODialog::OnBnClickedRadioCmode5)
+	ON_BN_CLICKED(IDC_RADIO_CMODE6, &CExtIODialog::OnBnClickedRadioCmode6)
+	ON_BN_CLICKED(IDC_RADIO_CMODE7, &CExtIODialog::OnBnClickedRadioCmode7)
 END_MESSAGE_MAP()
 
 
@@ -233,6 +240,18 @@ int hardwaretype;
 		GetDlgItem(IDC_RADIO_CMODE2)->EnableWindow(false);
 		GetDlgItem(IDC_RADIO_CMODE3)->EnableWindow(false);
 		GetDlgItem(IDC_RADIO_CMODE5)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE6)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE7)->EnableWindow(false);
+	}
+
+	// only enable panadapter if firmware version supports it
+	if ((fw_major < MIN_FW_MAJOR_PAN)||(fw_minor < MIN_FW_MINOR_PAN) || (fw_major == 256)) //1.58 had wrong endian for version info, so check for 256 major
+	{
+		if ((m_nChannelMode >=5)&&(m_nChannelMode <=6))
+			m_nChannelMode=CHMODE_A;
+
+		GetDlgItem(IDC_RADIO_CMODE6)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE7)->EnableWindow(false);
 	}
 
 	m_SyncGainCheck.SetCheck(AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncGain"), 0));
@@ -241,10 +260,24 @@ int hardwaretype;
 	{
 		m_SyncTuneCheck.SetCheck(1);
 		m_SyncTuneCheck.EnableWindow(false);
+		m_Button1.EnableWindow(false);
 	}
-	else
+	else if (m_nChannelMode <= 1)
 	{
 		m_SyncTuneCheck.SetCheck(AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncTuning"), 0));
+		m_Button1.EnableWindow(false);
+	}
+	else if ((m_nChannelMode >= 5)&&(m_nChannelMode <= 6))
+	{
+		m_SyncTuneCheck.SetCheck(0);
+		m_SyncTuneCheck.EnableWindow(false);
+		m_SyncGainCheck.SetCheck(0);
+		m_SyncGainCheck.EnableWindow(false);
+
+		SyncTuning=0;
+		SyncGain=0;
+
+		m_Button1.EnableWindow(true);
 	}
 
 	UpdateData(false);			//update radio buttons
@@ -574,18 +607,42 @@ unsigned long tunefreq;
 	{
 		m_SyncTuneCheck.SetCheck(1);
 		m_SyncTuneCheck.EnableWindow(false);
+		m_SyncGainCheck.SetCheck(SyncGain);
+		m_SyncGainCheck.EnableWindow(true);
+
 		SyncTuning=1;
 		if (HWType == 3)
 			IQSampleRate=IQSAMPLERATE_DIVERSITY;
+
+		m_Button1.EnableWindow(false);
 	}
-	else
+	else if (m_nChannelMode <= 1)
 	{
 		SyncTuning=AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncTuning"), 0);
 		m_SyncTuneCheck.SetCheck(SyncTuning);
 		m_SyncTuneCheck.EnableWindow(true);
+		m_SyncGainCheck.SetCheck(SyncGain);
+		m_SyncGainCheck.EnableWindow(true);
 		if (HWType == 3)
 			IQSampleRate=IQSAMPLERATE_FULL;
-	}	
+
+		m_Button1.EnableWindow(false);
+	}
+	else if ((m_nChannelMode >= 5)&&(m_nChannelMode <= 6))
+	{
+		m_SyncTuneCheck.SetCheck(0);
+		m_SyncTuneCheck.EnableWindow(false);
+		m_SyncGainCheck.SetCheck(0);
+		m_SyncGainCheck.EnableWindow(false);
+
+		SyncTuning=0;
+		SyncGain=0;
+
+		if (HWType == 3)
+			IQSampleRate=IQSAMPLERATE_PANADAPTER;
+
+		m_Button1.EnableWindow(true);
+	}
 
 	if (SyncTuning)				// override frequencies with channel A if synchronous tuning is selected!
 	{
@@ -658,4 +715,40 @@ void CExtIODialog::OnBnClickedRadioCmode4()		//A-B
 void CExtIODialog::OnBnClickedRadioCmode5()		//B-A
 {
 	ChangeMode(lastlo_freqA, lasttune_freqA);
+}
+
+void CExtIODialog::OnBnClickedRadioCmode6()		//A+Panadapter
+{
+	ChangeMode(lastlo_freqA, lasttune_freqA);
+}
+
+void CExtIODialog::OnBnClickedRadioCmode7()		//B+Panadapter
+{
+	ChangeMode(lastlo_freqB, lasttune_freqB);
+}
+
+void CExtIODialog::OnBnClickedButton1()
+{
+	// not sure if this can ever happen, but in case the ShowGUI() is called twice without closing the window inbetween,
+	// just re-activate the window rather than creating a new one.
+
+	if(m_pmodelessPanadapter)
+	{
+		m_pmodelessPanadapter->ShowWindow(SW_RESTORE);
+		m_pmodelessPanadapter->SetForegroundWindow();	
+	}
+	else
+	{
+		m_pmodelessPanadapter = new CPanadapterDialog;
+
+		if (m_pmodelessPanadapter)
+		{
+			m_pmodelessPanadapter->Create(/*CGenericMFCDlg*/CPanadapterDialog::IDD, CWnd::GetActiveWindow() /*GetDesktopWindow()*/);
+			m_pmodelessPanadapter->ShowWindow(SW_SHOW);
+		}
+		else
+		{
+			AfxMessageBox("Unable to Create Panadapter Window!", MB_OK | MB_ICONEXCLAMATION);
+		}
+	}
 }

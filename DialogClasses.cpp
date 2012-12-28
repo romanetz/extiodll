@@ -23,7 +23,7 @@
 //	  messaging definitions to ExtIODialog.cpp message map.
 //
 
-#define ExtIODialogClass(ClassName, PublicClass)	\
+#define DialogClass(ClassName, PublicClass)	\
 	IMPLEMENT_DYNAMIC(ClassName, PublicClass)		\
 													\
 	ClassName::##ClassName()						\
@@ -37,16 +37,22 @@
 	BEGIN_MESSAGE_MAP(ClassName, PublicClass)		\
 	END_MESSAGE_MAP()
 
+//ExtIO Dialog
+DialogClass(CGainSliderCHA, CSliderCtrl)
+DialogClass(CGainSliderCHB, CSliderCtrl)
+DialogClass(CPhaseSliderCoarse, CSliderCtrl)
+DialogClass(CPhaseSliderFine, CSliderCtrl)
+DialogClass(CCheckBoxDiversity, CButton)
+DialogClass(CCheckBoxSyncGain, CButton)
+DialogClass(CCheckBoxSyncTune, CButton)
+DialogClass(CPhaseInfo, CEdit)
+DialogClass(CTransparencySlider, CSliderCtrl)
+DialogClass(CCheckBoxDllIQ, CButton)
+DialogClass(CCheckBoxDebugConsole, CButton)
+DialogClass(CDataRateInfo, CEdit)
+DialogClass(CButton1, CButton) 
 
-ExtIODialogClass(CGainSliderCHA, CSliderCtrl)
-ExtIODialogClass(CGainSliderCHB, CSliderCtrl)
-ExtIODialogClass(CPhaseSliderCoarse, CSliderCtrl)
-ExtIODialogClass(CPhaseSliderFine, CSliderCtrl)
-ExtIODialogClass(CCheckBoxDiversity, CButton)
-ExtIODialogClass(CCheckBoxSyncGain, CButton)
-ExtIODialogClass(CCheckBoxSyncTune, CButton)
-ExtIODialogClass(CPhaseInfo, CEdit)
-ExtIODialogClass(CTransparencySlider, CSliderCtrl)
-ExtIODialogClass(CCheckBoxDllIQ, CButton)
-ExtIODialogClass(CCheckBoxDebugConsole, CButton)
-ExtIODialogClass(CDataRateInfo, CEdit)
+//Panadapter Dialog
+DialogClass(CSpeedSlider, CSliderCtrl)
+DialogClass(CRangeInfo, CEdit)
+DialogClass(CActiveInfo, CEdit)

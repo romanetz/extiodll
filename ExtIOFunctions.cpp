@@ -7,7 +7,7 @@
 
 	This source code is licensed as Creative Commons Attribution-ShareAlike
 	(CC BY-SA). 
-	
+	hwlo
 	From http://creativecommons.org:
 
 		This license lets others remix, tweak, and build upon your work even for commercial purposes, as long as they 
@@ -64,6 +64,9 @@
 			==== The chase for interrupted audio on some platforms (regardless of speed or number of cores) ====
 	v1.24	08.10.2012	-	Improved/more precise ExtIOCallbackTask() timing
 						-	Some of the waiting time excluded from loops
+
+	v1.30	28.12.2012	-	LO frequency drag-along stripped, since it created more problems than it solved
+						-	Preliminary panadapter support (faulty, zooming does not work etc. but works to some extent)
 
 
 	To Do:
@@ -145,6 +148,7 @@ volatile bool lo_changed = false;
 extern volatile bool channelmode_changed;
 
 volatile bool do_callback105=false;			// indicate, if datatask should call callback 105
+volatile bool do_callback101=false;			// indicate, if datatask should call callback 101
 volatile bool update_registry=false;
 
 extern volatile bool fifo_loaded;
@@ -303,6 +307,7 @@ int i;
 	}
 }
 
+
 extern "C" bool __stdcall InitHW(char *name, char *model, int& type)
 {
 //static bool first = true;
@@ -310,7 +315,7 @@ char errstring[128];
 int consoletransparency;
 unsigned long long libvernum;
 
-	DebugConsole=AfxGetApp()->GetProfileInt(_T("Config"), _T("DebugConsole"), 0);
+	DebugConsole = AfxGetApp()->GetProfileInt(_T("Config"), _T("DebugConsole"), 0);
 	Transparency = AfxGetApp()->GetProfileInt(_T("Config"), _T("Transparency"), -1);
 
 	consoletransparency=Transparency;
@@ -371,9 +376,13 @@ unsigned long long libvernum;
 		IQSampleRate = IQSAMPLERATE_DIVERSITY;
 		SyncTuning=1;
 	}
-	else
+	else if (ChannelMode <=1)
 	{
 		IQSampleRate = IQSAMPLERATE_FULL;
+	}
+	else
+	{
+		IQSampleRate = IQSAMPLERATE_PANADAPTER;
 	}
 
 	if (HWType != 3)
@@ -414,8 +423,10 @@ unsigned long long libvernum;
 
 	_cprintf("HWType = %d\n", HWType);
 
-	strcpy(name, "SDR MK1.5 Andrus");	// change with the name of your HW
-	strcpy(model, "SDR MK1.5 Andrus");	// change with the model of your HW
+	if (name != NULL)
+		strcpy(name, "SDR MK1.5 Andrus");	// change with the name of your HW
+	if (model != NULL)
+		strcpy(model, "SDR MK1.5 Andrus");	// change with the model of your HW
 
 	if (HWType == 3)
 	{
@@ -867,10 +878,12 @@ char freqstring[32];
 	switch(ChannelMode)
 	{
 	case CHMODE_A:
+	case CHMODE_ABPAN:
 		lastlo_freqA=LOfreq;
 		break;
 
 	case CHMODE_B:
+	case CHMODE_BAPAN:
 		lastlo_freqB=LOfreq;
 		break;
 
@@ -1114,10 +1127,12 @@ unsigned long increment;
 	switch(ChannelMode)
 	{
 	case CHMODE_A:
+	case CHMODE_ABPAN:
 		lasttune_freqA=freq;
 		break;
 
 	case CHMODE_B:
+	case CHMODE_BAPAN:
 		lasttune_freqB=freq;
 		break;
 
@@ -1125,6 +1140,9 @@ unsigned long increment;
 		lasttune_freqA=freq;
 		break;
 	}
+
+/*
+Nobody likes it, so the LO drag-along is deprecated
 
 	// should not get redundant, but still seems to help endless scrolling
 	if (do_callback105)
@@ -1178,7 +1196,7 @@ unsigned long increment;
 	}
 	
 	tune_freq=freq;
-
+*/
 	return;
 }
 

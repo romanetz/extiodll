@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "ExtIODll.h"
-#include "ExtIODialogClasses.h"
+#include "DialogClasses.h"
 #include "ExtIODialog.h"
 
 #include "libusb\lusb0_usb.h"
@@ -13,7 +13,7 @@ void (* ExtIOCallback)(int, int, float, void *) = NULL;
 
 // Task for receiving samples from radio and communicating back to HDSDR
 
-#define DATAMASK	0x3FFFF
+
 // note the triple buffering here. 
 unsigned char tmpData[60*1024];			//Bulk RX buffer. Keep huge to allow USB receive loop to fetch whatever is there, so radio side of USB can transmit as fast as it could!
 										//this buffer will be copied off immediately after bulk receive function returns. Note, that it has to be less than int/2
@@ -23,7 +23,7 @@ unsigned char SDRData[DATAMASK+1];		//this buffer is where we copy the tmpData t
 										//It is a ring buffer and 20kbytes will be cashed here just in case. IQData buffer content will be copied off from here.
 unsigned char IQData[SDRIQDATASIZE];	//take this as global. This buffer is given to HDSDR for samples
 
-unsigned long iqdata_wptr;
+//unsigned long iqdata_wptr;
 
 extern usb_dev_handle *dev;
 
@@ -36,11 +36,16 @@ volatile bool do_callbacktask=true;
 volatile bool fifo_loaded=false;
 
 extern volatile bool do_callback105;			// indicate, if datatask should call callback 105
+extern volatile bool do_callback101;
 extern volatile bool channelmode_changed;		// indicate, that GUI has requested channel mode change
 extern volatile bool update_lo;
 extern volatile bool samplerate_changed;		// indicates, that someone somewhere has requested sample rate change
 extern volatile bool gainA_changed;
 extern volatile bool gainB_changed;
+
+extern volatile bool do_pantableupdate;
+extern volatile bool panadaptertask_exited, run_panadaptertask;
+extern PANENTRY panentry;
 
 volatile bool update_phaseA=false;
 volatile bool update_gain=false;
@@ -57,6 +62,9 @@ extern int PhaseCoarse, PhaseFine;
 extern long IQSampleRate;
 
 double callbackinterval;										// note, that interval calculations are done with floating point, because callback interval is not integer ms
+
+unsigned int pandata_wptr = 0;
+unsigned char* PANData=NULL;
 
 /*
 usb_dev_handle *open_dev(void)
@@ -106,6 +114,8 @@ char tmp[128];
 		datatask_done=false;		// show that we are now inside the thread
 		datatask_running=true;
 	LeaveCriticalSection(&CriticalSection);
+
+	PANData=(unsigned char*)malloc(PANDATAMASK+1);		// allocate memory for panoramic data
 
 	/*
 	As the USB communication task is synchronous, we have to have another task what feeds the data with callback to software.
@@ -161,7 +171,7 @@ char tmp[128];
 	buffered=0;
 
 	sdr_wptr=0;
-	iqdata_wptr=0;
+	//iqdata_wptr=0;
 	buffer_filled=false;
 
 /*
@@ -192,6 +202,10 @@ char tmp[128];
 	if (ChannelMode < 2)
 	{
 		*(unsigned long*)&tmp[0]=IQSAMPLERATE_FULL;
+	}
+	else if ((ChannelMode >=5) && (ChannelMode <=6))
+	{
+		*(unsigned long*)&tmp[0]=IQSAMPLERATE_PANADAPTER;
 	}
 	else
 	{
@@ -373,6 +387,7 @@ char tmp[128];
 				switch (ChannelMode)
 				{
 				case CHMODE_A:
+				case CHMODE_ABPAN:
 					//lastlo_freqA=lo_freq;				
 					usb_control_msg(dev, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
 										LIBUSB_SETFREQ, 
@@ -381,7 +396,8 @@ char tmp[128];
 										tmp, 4, 1000);
 					break;
 
-				case CHMODE_B:			
+				case CHMODE_B:	
+				case CHMODE_BAPAN:
 					//lastlo_freqB=lo_freq;
 					usb_control_msg(dev, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
 										LIBUSB_SETFREQ, 
@@ -399,7 +415,56 @@ char tmp[128];
 			}
 		}
 
-		// See TuneChanged() function to get an idea, why this is needed
+		if (do_pantableupdate)
+		{
+		char convertedbuff[20];
+
+			EnterCriticalSection(&CriticalSection);
+				do_pantableupdate=false;					// clear request flag 
+			LeaveCriticalSection(&CriticalSection);
+
+			convertedbuff[0]=(panentry.startfreq>>24)&0xFF;
+			convertedbuff[1]=(panentry.startfreq>>16)&0xFF;
+			convertedbuff[2]=(panentry.startfreq>>8)&0xFF;
+			convertedbuff[3]=panentry.startfreq&0xFF;
+
+			convertedbuff[4]=(panentry.samples>>24)&0xFF;
+			convertedbuff[5]=(panentry.samples>>16)&0xFF;
+			convertedbuff[6]=(panentry.samples>>8)&0xFF;
+			convertedbuff[7]=panentry.samples&0xFF;
+
+			convertedbuff[8]=(panentry.stepfreq>>24)&0xFF;
+			convertedbuff[9]=(panentry.stepfreq>>16)&0xFF;
+			convertedbuff[10]=(panentry.stepfreq>>8)&0xFF;
+			convertedbuff[11]=panentry.stepfreq&0xFF;
+
+			convertedbuff[12]=(panentry.steps>>24)&0xFF;
+			convertedbuff[13]=(panentry.steps>>16)&0xFF;
+			convertedbuff[14]=(panentry.steps>>8)&0xFF;
+			convertedbuff[15]=panentry.steps&0xFF;
+
+			convertedbuff[16]=(panentry.magic_I>>8)&0xFF;
+			convertedbuff[17]=panentry.magic_I&0xFF;
+
+			convertedbuff[18]=(panentry.magic_Q>>8)&0xFF;
+			convertedbuff[19]=panentry.magic_Q&0xFF;
+
+			usb_control_msg(dev, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
+							LIBUSB_PANTABLE, 
+							1,  //single PAN table entry
+							SDR_BULKIF,  
+							(char*)&convertedbuff[0], 20, 1000);
+		}
+
+		if (do_callback101)
+		{
+			EnterCriticalSection(&CriticalSection);
+				do_callback101=false;					// clear callback request flag 
+			LeaveCriticalSection(&CriticalSection);
+
+			(*ExtIOCallback)(-1, 101, 0, NULL);			// sync LO frequency
+		}	
+
 		if (do_callback105)
 		{
 			EnterCriticalSection(&CriticalSection);
@@ -407,6 +472,24 @@ char tmp[128];
 			LeaveCriticalSection(&CriticalSection);
 
 			(*ExtIOCallback)(-1, 105, 0, NULL);			// sync tune frequency
+		}		
+
+		if (samplerate_changed)
+		{
+			EnterCriticalSection(&CriticalSection);
+				samplerate_changed=false;					// clear sample rate change request flag 
+			LeaveCriticalSection(&CriticalSection);
+			
+			*(unsigned long*)&tmp[0]=IQSampleRate;
+
+			tmp[4]=16;
+			usb_control_msg(dev, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
+									LIBUSB_SAMPLEMODE, 
+									0,  
+									SDR_BULKIF,  
+									tmp, 5, 1000);
+
+			(*ExtIOCallback)(-1, 100, 0, NULL);				// sync sampling rate
 		}
 
 		if (channelmode_changed)
@@ -420,24 +503,6 @@ char tmp[128];
 							ChannelMode /*LIBMODE_16A*/,  
 							SDR_BULKIF,  
 							tmp, 1, 1000);
-		}
-
-		if (samplerate_changed)
-		{
-			EnterCriticalSection(&CriticalSection);
-				samplerate_changed=false;					// clear sample rate change request flag 
-			LeaveCriticalSection(&CriticalSection);
-
-			*(unsigned long*)&tmp[0]=IQSampleRate;
-
-			tmp[4]=16;
-			usb_control_msg(dev, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
-									LIBUSB_SAMPLEMODE, 
-									0,  
-									SDR_BULKIF,  
-									tmp, 5, 1000);
-
-			(*ExtIOCallback)(-1, 100, 0, NULL);				// sync sampling rate
 		}
 
 		if (update_phaseA)
@@ -517,8 +582,23 @@ char tmp[128];
 	if (do_callbacktask)
 	{
 		do_callbacktask=false;
-		while(callbacktask_running)
-			WaitForSingleObject(sleepevent, 0);		// give away timeslice		
+
+		for (i=0; i<200; i++)			// wait alltogether two seconds
+		{		
+			if (!callbacktask_running)
+				break;
+			WaitForSingleObject(sleepevent, 10);		// give away timeslice		
+		}
+	}
+
+	// have to wait for panadapter task to finish, otherwise PANData array gets lost before task finishes and HDSDR ends with exception
+	_cprintf("Waiting for Panadapter task to exit ..\n");
+	run_panadaptertask=false;
+	for (i=0; i<200; i++)			// wait alltogether two seconds
+	{
+		if (panadaptertask_exited)
+			break;
+		WaitForSingleObject(sleepevent, 10);		// give away timeslice		
 	}
 
 	_cprintf("ExtIODataTask() now leaving!\n");
@@ -561,7 +641,7 @@ unsigned long sdr_wptr_local;
 	while((do_callbacktask)&&(!globalshutdown))
 	{		
 		// Oddly enough, if we are measuring time ourselves and just give time away with WaitForSingleObject(xx, 0)
-		// the CPU gets 100% utilization. So we are now using WaitForSingleObject() for timings.
+		// the CPU gets 100% utilization. So we are now using WaitForSingleObject() for timings, what also gives away time then.
 
 		//if ((cachedblocks < WINRAD2CACHE) || (nextpass <= GetTickCount()))
 		{
@@ -573,12 +653,58 @@ unsigned long sdr_wptr_local;
 			//fill IQ data buffer 
 			if (iqdata_wptr < SDRIQDATASIZE)
 			{
-				while (((sdr_readptr&DATAMASK) != (sdr_wptr_local&DATAMASK))&&(iqdata_wptr < SDRIQDATASIZE)&&(do_datatask)&&(!globalshutdown))
-				{					
-					IQData[iqdata_wptr]=SDRData[sdr_readptr&DATAMASK];		// note, that as sdr_rptr was initialized to -1, we must increment it _before_ usage.
-					sdr_readptr++;
-					iqdata_wptr++;
-					//WaitForSingleObject(sleepevent, 0);					// give away timeslice	
+				// If we are in panadapter mode, we have to split the stream in two between actual channel data and panadapter data
+				if (ChannelMode == 5)	//A + panadapter
+				{
+					while (((sdr_readptr&DATAMASK) != (sdr_wptr_local&DATAMASK))&&(iqdata_wptr < SDRIQDATASIZE)&&(do_datatask)&&(!globalshutdown))
+					{					
+						if (!(sdr_readptr&0x4))
+						{
+							IQData[iqdata_wptr]=SDRData[sdr_readptr&DATAMASK];							
+							iqdata_wptr++;
+						}
+						else
+						{
+							//data for panadapter
+							PANData[pandata_wptr&PANDATAMASK]=SDRData[sdr_readptr&DATAMASK];	// 256K ring buffer
+							pandata_wptr++;
+						}
+
+						sdr_readptr++;
+						
+						//WaitForSingleObject(sleepevent, 0);					// give away timeslice	
+					}
+				}
+				else if (ChannelMode == 6)	//B + panadapter
+				{
+					while (((sdr_readptr&DATAMASK) != (sdr_wptr_local&DATAMASK))&&(iqdata_wptr < SDRIQDATASIZE)&&(do_datatask)&&(!globalshutdown))
+					{					
+						if (sdr_readptr&0x4)
+						{
+							IQData[iqdata_wptr]=SDRData[sdr_readptr&DATAMASK];									
+							iqdata_wptr++;
+						}
+						else
+						{
+							//data for panadapter
+							PANData[pandata_wptr&PANDATAMASK]=SDRData[sdr_readptr&DATAMASK];	// 256K ring buffer
+							pandata_wptr++;
+						}
+
+						sdr_readptr++;
+						
+						//WaitForSingleObject(sleepevent, 0);					// give away timeslice	
+					}
+				}
+				else
+				{
+					while (((sdr_readptr&DATAMASK) != (sdr_wptr_local&DATAMASK))&&(iqdata_wptr < SDRIQDATASIZE)&&(do_datatask)&&(!globalshutdown))
+					{					
+						IQData[iqdata_wptr]=SDRData[sdr_readptr&DATAMASK];		// note, that as sdr_rptr was initialized to -1, we must increment it _before_ usage.
+						sdr_readptr++;
+						iqdata_wptr++;
+						//WaitForSingleObject(sleepevent, 0);					// give away timeslice	
+					}
 				}
 			}
 
