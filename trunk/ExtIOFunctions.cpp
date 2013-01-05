@@ -68,6 +68,9 @@
 	v1.30	28.12.2012	-	LO frequency drag-along stripped, since it created more problems than it solved
 						-	Preliminary panadapter support (faulty, zooming does not work etc. but works to some extent)
 
+	v1.35	04.01.2013	-	Test version - Lots of stuff fixed in panadapter. Does not work perfectly, but is more or less usable.
+						-	Fixes for tuning sync and A/B frequeny switching and storing
+
 
 	To Do:
 
@@ -183,6 +186,8 @@ usb_dev_handle *dev = NULL;					// device handle to be used by libusb
 const struct usb_version* libver = NULL;	// libusb version information
 //char tmp[128];
 
+CWnd* MainWindow;
+
 /*
 This entry is the first called by Winrad at startup time, and it is used both to tell to the DLL that it is 
 time to initialize the hardware, and to get back a descriptive name and model (or Serial Number) of the HW, 
@@ -248,7 +253,7 @@ int i;
 				update_registry=false;			// should be in critical section really, but works without as well
 				break;
 			}
-			WaitForSingleObject(sleepevent, 1000);					// do it only after every 10 seconds
+			WaitForSingleObject(sleepevent, 1000);					// do it only after every second
 		}
 
 		if (lastlo_freqA != lastloa)
@@ -257,7 +262,7 @@ int i;
 			lastloa=lastlo_freqA;
 		}
 
-		if (lastlo_freqA != lastloa)
+		if (lastlo_freqB != lastlob)
 		{
 			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastLO_B"), lastlo_freqB);
 			lastlob=lastlo_freqB;
@@ -402,16 +407,19 @@ unsigned long long libvernum;
 	lasttune_freqA=AfxGetApp()->GetProfileInt(_T("Config"), _T("LastTune_A"), 0);
 	lasttune_freqB=AfxGetApp()->GetProfileInt(_T("Config"), _T("LastTune_B"), 0);
 	
-
-	if (ChannelMode == CHMODE_B)
+	switch(ChannelMode)
 	{
+	case CHMODE_B:
+	case CHMODE_BMA:
+	case CHMODE_BAPAN:
 		lo_freq=lastlo_freqB;
 		tune_freq=lasttune_freqB;
-	}
-	else
-	{
+		break;
+
+	default:
 		lo_freq=lastlo_freqA;
 		tune_freq=lasttune_freqA;
+		break;
 	}	
 
 	_beginthread(ExtIORegistryUpdateTask, 0, NULL);
@@ -877,13 +885,9 @@ char freqstring[32];
 	// store channel-specific
 	switch(ChannelMode)
 	{
-	case CHMODE_A:
-	case CHMODE_ABPAN:
-		lastlo_freqA=LOfreq;
-		break;
-
 	case CHMODE_B:
 	case CHMODE_BAPAN:
+	case CHMODE_BMA:
 		lastlo_freqB=LOfreq;
 		break;
 
@@ -1045,7 +1049,9 @@ extern "C" void __stdcall ShowGUI(void)
 
 		if (m_pmodeless)
 		{
-			m_pmodeless->Create(/*CGenericMFCDlg*/CExtIODialog::IDD, CWnd::GetActiveWindow() /*GetDesktopWindow()*/);
+			MainWindow=CWnd::GetActiveWindow();
+
+			m_pmodeless->Create(/*CGenericMFCDlg*/CExtIODialog::IDD, MainWindow /*GetDesktopWindow()*/);
 			m_pmodeless->ShowWindow(SW_SHOW);
 		}
 		else
@@ -1126,12 +1132,8 @@ unsigned long increment;
 	// store channel-specific
 	switch(ChannelMode)
 	{
-	case CHMODE_A:
-	case CHMODE_ABPAN:
-		lasttune_freqA=freq;
-		break;
-
 	case CHMODE_B:
+	case CHMODE_BMA:
 	case CHMODE_BAPAN:
 		lasttune_freqB=freq;
 		break;

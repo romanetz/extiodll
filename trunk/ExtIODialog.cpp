@@ -50,6 +50,8 @@ extern const struct usb_version* libver;
 
 CPanadapterDialog* m_pmodelessPanadapter = NULL;
 
+extern CWnd* MainWindow;
+
 // CExtIODialog dialog
 
 IMPLEMENT_DYNAMIC(CExtIODialog, CDialog)
@@ -309,6 +311,14 @@ void CExtIODialog::PostNcDestroy()
 // We have to handle close event, as we do not have parent object what would perform destruction for us
 void CExtIODialog::OnClose()
 {
+	if (m_pmodelessPanadapter)
+	{
+		m_pmodelessPanadapter->CloseWindow();
+
+		while(m_pmodelessPanadapter)
+		{}
+	}
+
 	if (m_pmodeless)
 	{
 		m_pmodeless->DestroyWindow();
@@ -603,8 +613,26 @@ unsigned long tunefreq;
 
 	AfxGetApp()->WriteProfileInt(_T("Config"), _T("ChannelMode"), m_nChannelMode);
 
-	if ((m_nChannelMode > 1)&&(m_nChannelMode < 5))		// fix tuning for diversity modes
+	switch(ChannelMode)
 	{
+	case CHMODE_A:
+	case CHMODE_B:
+
+		SyncTuning=AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncTuning"), 0);
+		m_SyncTuneCheck.SetCheck(SyncTuning);
+		m_SyncTuneCheck.EnableWindow(true);
+		m_SyncGainCheck.SetCheck(SyncGain);
+		m_SyncGainCheck.EnableWindow(true);
+		if (HWType == 3)
+			IQSampleRate=IQSAMPLERATE_FULL;
+
+		m_Button1.EnableWindow(false);
+		break;
+
+	case CHMODE_APB:
+	case CHMODE_AMB:
+	case CHMODE_BMA:			// fix tuning for diversity modes
+
 		m_SyncTuneCheck.SetCheck(1);
 		m_SyncTuneCheck.EnableWindow(false);
 		m_SyncGainCheck.SetCheck(SyncGain);
@@ -615,21 +643,11 @@ unsigned long tunefreq;
 			IQSampleRate=IQSAMPLERATE_DIVERSITY;
 
 		m_Button1.EnableWindow(false);
-	}
-	else if (m_nChannelMode <= 1)
-	{
-		SyncTuning=AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncTuning"), 0);
-		m_SyncTuneCheck.SetCheck(SyncTuning);
-		m_SyncTuneCheck.EnableWindow(true);
-		m_SyncGainCheck.SetCheck(SyncGain);
-		m_SyncGainCheck.EnableWindow(true);
-		if (HWType == 3)
-			IQSampleRate=IQSAMPLERATE_FULL;
+		break;	
 
-		m_Button1.EnableWindow(false);
-	}
-	else if ((m_nChannelMode >= 5)&&(m_nChannelMode <= 6))
-	{
+	case CHMODE_ABPAN:
+	case CHMODE_BAPAN:
+
 		m_SyncTuneCheck.SetCheck(0);
 		m_SyncTuneCheck.EnableWindow(false);
 		m_SyncGainCheck.SetCheck(0);
@@ -642,6 +660,10 @@ unsigned long tunefreq;
 			IQSampleRate=IQSAMPLERATE_PANADAPTER;
 
 		m_Button1.EnableWindow(true);
+		break;
+	
+	default:			// should not get here
+		break;	
 	}
 
 	if (SyncTuning)				// override frequencies with channel A if synchronous tuning is selected!
@@ -714,7 +736,7 @@ void CExtIODialog::OnBnClickedRadioCmode4()		//A-B
 
 void CExtIODialog::OnBnClickedRadioCmode5()		//B-A
 {
-	ChangeMode(lastlo_freqA, lasttune_freqA);
+	ChangeMode(lastlo_freqB, lasttune_freqB);
 }
 
 void CExtIODialog::OnBnClickedRadioCmode6()		//A+Panadapter
@@ -729,9 +751,6 @@ void CExtIODialog::OnBnClickedRadioCmode7()		//B+Panadapter
 
 void CExtIODialog::OnBnClickedButton1()
 {
-	// not sure if this can ever happen, but in case the ShowGUI() is called twice without closing the window inbetween,
-	// just re-activate the window rather than creating a new one.
-
 	if(m_pmodelessPanadapter)
 	{
 		m_pmodelessPanadapter->ShowWindow(SW_RESTORE);
@@ -743,7 +762,7 @@ void CExtIODialog::OnBnClickedButton1()
 
 		if (m_pmodelessPanadapter)
 		{
-			m_pmodelessPanadapter->Create(/*CGenericMFCDlg*/CPanadapterDialog::IDD, CWnd::GetActiveWindow() /*GetDesktopWindow()*/);
+			m_pmodelessPanadapter->Create(/*CGenericMFCDlg*/CPanadapterDialog::IDD, CWnd::GetActiveWindow() /*MainWindow*/ /*GetDesktopWindow()*/);
 			m_pmodelessPanadapter->ShowWindow(SW_SHOW);
 		}
 		else
