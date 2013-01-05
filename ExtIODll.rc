@@ -117,9 +117,9 @@ BEGIN
     CONTROL         "A+ B",IDC_RADIO_CMODE3,"Button",BS_AUTORADIOBUTTON,67,85,32,10
     CONTROL         "A - B",IDC_RADIO_CMODE4,"Button",BS_AUTORADIOBUTTON,67,96,31,10
     CONTROL         "B - A",IDC_RADIO_CMODE5,"Button",BS_AUTORADIOBUTTON,67,107,31,10
-    CONTROL         "A+ Holidays!",IDC_RADIO_CMODE6,"Button",BS_AUTORADIOBUTTON,67,118,57,10
-    CONTROL         "B+ Holidays!",IDC_RADIO_CMODE7,"Button",BS_AUTORADIOBUTTON,67,129,57,10
-    PUSHBUTTON      "Holidays!",IDC_BUTTON1,219,135,60,13,WS_DISABLED
+    CONTROL         "A+ Panadapter",IDC_RADIO_CMODE6,"Button",BS_AUTORADIOBUTTON,67,118,65,10
+    CONTROL         "B+ Panadapter",IDC_RADIO_CMODE7,"Button",BS_AUTORADIOBUTTON,67,129,65,10
+    PUSHBUTTON      "Panadapter",IDC_BUTTON1,219,135,60,13,WS_DISABLED
     CONTROL         "",IDC_SLIDER1,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,175,60,100,15
     CONTROL         "",IDC_SLIDER2,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,175,79,100,15
     CONTROL         "Sync Gain",IDC_CHECK2,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,149,101,47,10
@@ -160,12 +160,12 @@ EXSTYLE WS_EX_STATICEDGE
 CAPTION "Panadapter"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    LTEXT           "Range:",IDC_STATIC,37,218,24,8
-    EDITTEXT        IDC_EDIT1,65,217,154,12,ES_AUTOHSCROLL | WS_DISABLED
-    LTEXT           "Active:",IDC_STATIC,236,218,24,8
-    EDITTEXT        IDC_EDIT2,264,217,79,12,ES_AUTOHSCROLL | WS_DISABLED
-    LTEXT           "Speed:",IDC_STATIC,384,219,24,8
-    CONTROL         "",IDC_SLIDER1,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,410,214,159,15
+    LTEXT           "Range:",IDC_STATIC,18,218,24,8
+    EDITTEXT        IDC_EDIT1,46,217,260,12,ES_AUTOHSCROLL | WS_DISABLED
+    LTEXT           "Active:",IDC_STATIC,311,218,24,8
+    EDITTEXT        IDC_EDIT2,339,217,98,12,ES_AUTOHSCROLL | WS_DISABLED
+    LTEXT           "Speed:",IDC_STATIC,442,219,24,8
+    CONTROL         "",IDC_SLIDER1,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,468,214,130,15
     CONTROL         "Custom3",IDC_CUSTOM1,"MFCRangeSlider",WS_TABSTOP,7,186,880,11
     CONTROL         "Custom4",IDC_CUSTOM2,"MFCRangeSlider",WS_TABSTOP,895,14,11,160
     LTEXT           "0 MHz",IDC_STATIC,7,197,25,8
@@ -178,8 +178,8 @@ BEGIN
     LTEXT           "20 MHz",IDC_STATIC,551,197,25,8
     LTEXT           "28 MHz",IDC_STATIC,762,197,25,8
     GROUPBOX        "",IDC_WATERFALL,16,7,863,168,BS_BITMAP,WS_EX_CLIENTEDGE
-    LTEXT           "Fourier Class by Don Cross / Fred Ackers (waveIn) (The Code Project Open Lincense)",IDC_STATIC,606,212,290,9
-    LTEXT           "CRangeSlider Class by Jens Scheidtmann (Creative Commons BY-SA 3.0 License)",IDC_STATIC,606,220,290,9
+    LTEXT           "FFT Code by Don Cross, Adapted by Fred Ackers (waveIn) (Code Project Open Lincense)",IDC_STATIC,606,212,300,9
+    LTEXT           "RangeSlider Class by Jens Scheidtmann (Creative Commons BY-SA 3.0 License)",IDC_STATIC,606,220,290,9
 END
 
 

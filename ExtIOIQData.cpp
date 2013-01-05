@@ -98,11 +98,13 @@ void ExtIODataTask(void* dummy)
 {
 HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
 int ret;
-unsigned long i;
+unsigned long i, j, k;
 unsigned long starttime, millis, totalbytes, lasttotalbytes, buffered;
 double mbits;
 int last_synctuning;
-unsigned long phaseword;;
+unsigned long phaseword;
+unsigned int iterations=0;
+unsigned long bytecounter=0;
 
 //char errstring[128];
 //unsigned long sdr_rptr_local, cached_len;
@@ -171,6 +173,7 @@ char tmp[128];
 	buffered=0;
 
 	sdr_wptr=0;
+	bytecounter=0;
 	//iqdata_wptr=0;
 	buffer_filled=false;
 
@@ -269,16 +272,34 @@ char tmp[128];
 		//if there was any data, put it to staging ring buffer
 		if (ret > 0)
 		{
-			for (i=0; i<(unsigned int)ret; i++)
-			{
-				SDRData[(sdr_wptr+i)&DATAMASK]=tmpData[i];		// somewhat slow but straightforward, as memmove() will likely not roll over at 64K								
+			for (i=0, j=0, k=0; i<(unsigned int)ret; i++)
+			{			
+				//WaitForSingleObject(sleepevent, 0);					// give away timeslice		
+				// multiplex off data for panadapter
+				if ((ChannelMode == 5)&&((bytecounter+i)&0x4))				//A + panadapter. sdr_wptr+pandata_wptr+i is a method to calculate byte count since the beginning
+				{										
+					PANData[(pandata_wptr+j)&PANDATAMASK]=tmpData[i];	// 256K ring buffer
+					j++;
+				}
+				else if ((ChannelMode == 6)&&(!((bytecounter+i)&0x4)))		//B + panadapter
+				{									
+					PANData[(pandata_wptr+j)&PANDATAMASK]=tmpData[i];	// 256K ring buffer
+					j++;
+				}
+				else
+				{
+					SDRData[(sdr_wptr+k)&DATAMASK]=tmpData[i];			// somewhat slow but straightforward, as memmove() will likely not roll over at 64K	
+					k++;
+				}
 			}
 
 			EnterCriticalSection(&CriticalSection);		
-				sdr_wptr+=ret;								// copy current write offset from data pump task
+				sdr_wptr+=k;								// copy current write offset from data pump task
+				pandata_wptr+=j;
 			LeaveCriticalSection(&CriticalSection);
 
-			totalbytes+=ret;	
+			totalbytes+=ret;
+			bytecounter+=ret;
 
 			if (buffered < (SDRIQDATASIZE*DATATASK2CACHE))			// cache some amount of full buffers (we are going to write down immediately most of them to internal cache of HDSDR)
 			{
@@ -386,17 +407,8 @@ char tmp[128];
 			{			
 				switch (ChannelMode)
 				{
-				case CHMODE_A:
-				case CHMODE_ABPAN:
-					//lastlo_freqA=lo_freq;				
-					usb_control_msg(dev, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
-										LIBUSB_SETFREQ, 
-										LIBUSB_CHA,  
-										SDR_BULKIF,  
-										tmp, 4, 1000);
-					break;
-
 				case CHMODE_B:	
+				case CHMODE_BMA:
 				case CHMODE_BAPAN:
 					//lastlo_freqB=lo_freq;
 					usb_control_msg(dev, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
@@ -410,6 +422,11 @@ char tmp[128];
 					// just reset frequencys and do nothing
 					//lastlo_freqA=lo_freq;
 					//lastlo_freqB=lo_freq;
+					usb_control_msg(dev, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
+										LIBUSB_SETFREQ, 
+										LIBUSB_CHA,  
+										SDR_BULKIF,  
+										tmp, 4, 1000);
 					break;
 				}		
 			}
@@ -417,7 +434,7 @@ char tmp[128];
 
 		if (do_pantableupdate)
 		{
-		char convertedbuff[20];
+		char convertedbuff[24];
 
 			EnterCriticalSection(&CriticalSection);
 				do_pantableupdate=false;					// clear request flag 
@@ -449,11 +466,17 @@ char tmp[128];
 			convertedbuff[18]=(panentry.magic_Q>>8)&0xFF;
 			convertedbuff[19]=panentry.magic_Q&0xFF;
 
+			convertedbuff[20]=(panentry.skip>>8)&0xFF;
+			convertedbuff[21]=panentry.skip&0xFF;
+
+			convertedbuff[22]=(panentry.dummy>>8)&0xFF;
+			convertedbuff[23]=panentry.dummy&0xFF;
+
 			usb_control_msg(dev, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
 							LIBUSB_PANTABLE, 
 							1,  //single PAN table entry
 							SDR_BULKIF,  
-							(char*)&convertedbuff[0], 20, 1000);
+							(char*)&convertedbuff[0], 24, 1000);
 		}
 
 		if (do_callback101)
@@ -552,7 +575,11 @@ char tmp[128];
 
 		}
 
-		WaitForSingleObject(sleepevent, 0);		// give away timeslice		
+		iterations++;
+		if (!(iterations%10000))
+			WaitForSingleObject(sleepevent, 1);		// give away timeslice		
+		else
+			WaitForSingleObject(sleepevent, 0);		// give away timeslice		
 	}	
 
 	if (dev)
@@ -618,6 +645,7 @@ HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that
 double nextpass;
 int cachedblocks, iqdata_wptr;
 unsigned long sdr_wptr_local;
+unsigned int iterations=0;
 
 	EnterCriticalSection(&CriticalSection);
 		threadcount++;
@@ -633,7 +661,7 @@ unsigned long sdr_wptr_local;
 	// wait for data task to cache enough data
 	while((do_callbacktask)&&(!globalshutdown)&&(!buffer_filled))
 	{
-		WaitForSingleObject(sleepevent, 0);					// give away timeslice	
+		WaitForSingleObject(sleepevent, 1);					// give away timeslice	
 	}
 
 	nextpass=GetTickCount();	// start counting time
@@ -653,6 +681,7 @@ unsigned long sdr_wptr_local;
 			//fill IQ data buffer 
 			if (iqdata_wptr < SDRIQDATASIZE)
 			{
+				/*
 				// If we are in panadapter mode, we have to split the stream in two between actual channel data and panadapter data
 				if (ChannelMode == 5)	//A + panadapter
 				{
@@ -663,12 +692,14 @@ unsigned long sdr_wptr_local;
 							IQData[iqdata_wptr]=SDRData[sdr_readptr&DATAMASK];							
 							iqdata_wptr++;
 						}
+						
 						else
 						{
 							//data for panadapter
-							PANData[pandata_wptr&PANDATAMASK]=SDRData[sdr_readptr&DATAMASK];	// 256K ring buffer
-							pandata_wptr++;
+							//PANData[pandata_wptr&PANDATAMASK]=SDRData[sdr_readptr&DATAMASK];	// 256K ring buffer
+							//pandata_wptr++;
 						}
+						
 
 						sdr_readptr++;
 						
@@ -684,13 +715,14 @@ unsigned long sdr_wptr_local;
 							IQData[iqdata_wptr]=SDRData[sdr_readptr&DATAMASK];									
 							iqdata_wptr++;
 						}
+						
 						else
 						{
 							//data for panadapter
-							PANData[pandata_wptr&PANDATAMASK]=SDRData[sdr_readptr&DATAMASK];	// 256K ring buffer
-							pandata_wptr++;
+							//PANData[pandata_wptr&PANDATAMASK]=SDRData[sdr_readptr&DATAMASK];	// 256K ring buffer
+							//pandata_wptr++;
 						}
-
+						
 						sdr_readptr++;
 						
 						//WaitForSingleObject(sleepevent, 0);					// give away timeslice	
@@ -698,6 +730,7 @@ unsigned long sdr_wptr_local;
 				}
 				else
 				{
+				*/
 					while (((sdr_readptr&DATAMASK) != (sdr_wptr_local&DATAMASK))&&(iqdata_wptr < SDRIQDATASIZE)&&(do_datatask)&&(!globalshutdown))
 					{					
 						IQData[iqdata_wptr]=SDRData[sdr_readptr&DATAMASK];		// note, that as sdr_rptr was initialized to -1, we must increment it _before_ usage.
@@ -705,7 +738,7 @@ unsigned long sdr_wptr_local;
 						iqdata_wptr++;
 						//WaitForSingleObject(sleepevent, 0);					// give away timeslice	
 					}
-				}
+				//}
 			}
 
 			if (iqdata_wptr == SDRIQDATASIZE)

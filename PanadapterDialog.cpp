@@ -36,11 +36,20 @@ extern volatile bool do_callback101;
 volatile bool do_pantableupdate=false;
 
 PANENTRY panentry;
-int fftbands=8;
-int fftbandsneeded=4;
+int fftbands=0;
+int fftbandsneeded=0;
+int skipzone=0;
+
+int fftbands_new=8;
+int fftbandsneeded_new=4;
+int skipzone_new=8;
+
+long long _lastrangemin=32000000;		// cause immdiate update on pass 1
+long long _lastrangemax=0;
 
 double dbrangemin=0, dbrangemax=1100;
 
+CBitmap *pOldBitmap;
 
 IMPLEMENT_DYNAMIC(CPanadapterDialog, CDialog)
 
@@ -98,6 +107,7 @@ BEGIN_MESSAGE_MAP(CPanadapterDialog, CDialog)
 	ON_WM_LBUTTONDOWN()
 	ON_WM_ERASEBKGND()
 	ON_REGISTERED_MESSAGE(RANGE_CHANGED, OnRangeChange)
+	ON_WM_CLOSE()
 /*
 	ON_BN_CLICKED(IDOK, &CExtIODialog::OnBnClickedOk)
 	ON_BN_CLICKED(IDC_BUTTON1, &CExtIODialog::OnBnClickedButton1)
@@ -121,9 +131,9 @@ END_MESSAGE_MAP()
 
 void PanadapterTask(void* dummy);
 
-CDC MemDC, *pDC;
+CDC *MemDC, *pDC;
 CRect rcWaterFall;	
-CBitmap MemBitmap;
+CBitmap *MemBitmap;
 
 volatile bool run_panadaptertask, panadaptertask_exited=false;
 
@@ -189,21 +199,23 @@ int i, j;
 	
 	pDC = GetDlgItem(IDC_WATERFALL)->GetDC();
 
-	MemDC.CreateCompatibleDC(pDC);
-	MemBitmap.CreateCompatibleBitmap(pDC,rcWaterFall.right,rcWaterFall.bottom);
+	MemDC = new CDC;
+	MemDC->CreateCompatibleDC(pDC);
+	MemBitmap = new CBitmap;
+	MemBitmap->CreateCompatibleBitmap(pDC,rcWaterFall.right,rcWaterFall.bottom);
 
 	// build empty waterfall
-	CBitmap *pOldBitmap = (CBitmap*) MemDC.SelectObject(&MemBitmap);
+	pOldBitmap = (CBitmap*) MemDC->SelectObject(MemBitmap);
 
 	for (i=0; i<rcWaterFall.bottom; i++)
 	{
 		for (j=0; j<rcWaterFall.right; j++)
 		{
-			MemDC.SetPixelV(j, i, RGB(0, 0, rand()%255));
+			MemDC->SetPixelV(j, i, RGB(0, 0, rand()%255));
 		}
 	}
 
-	MemDC.SelectObject(pOldBitmap);
+	MemDC->SelectObject(pOldBitmap);
 
 	panentry.magic_I=0x55A0;
 	panentry.magic_Q=0xF0F0;
@@ -238,7 +250,15 @@ float shift=10.0f;			// just brighten the overall picture by x dB
 
 double multiplier;
 
-	
+	/*
+	for (i=0; i<_fftbands; i++)
+	{
+		fftpool[i]-=(dbrangemin/10);			// crop from below;
+		if (fftpool[i] < 0)
+			fftpool[i]=0;
+	}
+	*/
+
 	/*
 	for (i=0; i<_fftbands; i++)
 	{
@@ -248,11 +268,15 @@ double multiplier;
 		fftpool[i]/=expander;			//100=no expansion; below 100 will cause expansion
 		fftpool[i]+=shift;
 
-		if (fftpool[i] > 100.0f)
-			fftpool[i]=100.0f;			// set limiter to 100dB
+		if (fftpool[i] > 110.0f)
+			fftpool[i]=110.0f;			// set limiter to 100dB
 
 	}
 	*/
+
+	/*
+	// now create expander
+
 	multiplier=(110-(dbrangemin/10))/(dbrangemax/10);
 
 	for (i=0; i<_fftbands; i++)
@@ -267,6 +291,18 @@ double multiplier;
 		if (fftpool[i]>110)
 			fftpool[i]=110;
 	}
+	*/
+	
+	multiplier=110/((dbrangemax-dbrangemin)/10);
+
+	for (i=0; i<_fftbands; i++)
+	{
+		fftpool[i]-=(dbrangemin/10);
+		if (fftpool[i] < 0)
+			fftpool[i]=0;		
+
+		fftpool[i]*=multiplier;
+	}
 }
 
 
@@ -280,14 +316,13 @@ unsigned char magic[12]={0xA0+0, 0x55, 0xF0+1, 0xF0, 0xA0+2, 0x55, 0xF0+3, 0xF0,
 int panstate=PAN_MAGIC;
 
 int minfreq, maxfreq;
-long long _lastrangemin=32000000;		// cause immdiate update on pass 1
-long long _lastrangemax=0;
+long long _freqrangemin=0, _freqrangemax=32000000, _freqspan=32000000;
 
 float dbminmaxpool[0xFFF+1];
 
 void PanadapterTask(void* dummy)
 {
-static int i=0, j=0, k;
+int i=0, j=0, k;
 unsigned int l_pandata_wptr;
 //char prntxt[64];
 char freqbuff[8];		// four last bytes are used for checking the trailer magic (supposed to be AA 55 F0 F0)
@@ -303,7 +338,12 @@ double* fftpoolI;
 double* fftpoolQ;
 float *fdraw;
 long long freqpos;
-static int oldfftbands;
+double fftincrement, fdrawoffset, fftstart, fftend;
+int* fftmap;
+int* fftmap16;
+double dummydbl;
+double* window;
+unsigned int iterations=0;
 
 float re, im;
 
@@ -323,40 +363,108 @@ unsigned int dbpooloffset=0;
 	fftpoolQ=(double*)malloc(fftbands*sizeof(double));
 	pandataI=(double*)malloc(fftbands*sizeof(double));
 	pandataQ=(double*)malloc(fftbands*sizeof(double));
+	window=(double*)malloc(fftbands*sizeof(double));
 	fdraw=(float*)malloc(fftbands*sizeof(float));
+	fftmap=(int*)malloc(fftbands*sizeof(int));
+	fftmap16=(int*)malloc(fftbands*sizeof(int));
 
 	pandata=(char*)malloc(PANDATAMASK+1);
 	
 	maxfreq=0;
 	minfreq=32000000;
-	oldfftbands=fftbands;
 
-	/*CBitmap *pOldBitmap = (CBitmap*)*/ MemDC.SelectObject(&MemBitmap);
+	MemDC->SelectObject(MemBitmap);
 
 	panadaptertask_exited=false;
 
 	while(run_panadaptertask)
 	{
 		//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
-		WaitForSingleObject(sleepevent, 50);		// sleep for 50ms
+		WaitForSingleObject(sleepevent, 1);
 
-		if (oldfftbands<fftbands)
+		if (fftbands_new > fftbands)
 		{
-			fftpoolI=(double*)realloc(fftpoolI, fftbands*sizeof(double));
-			fftpoolQ=(double*)realloc(fftpoolQ, fftbands*sizeof(double));
-			pandataI=(double*)realloc(pandataI, fftbands*sizeof(double));
-			pandataQ=(double*)realloc(pandataQ, fftbands*sizeof(double));
-			fdraw=(float*)realloc(fdraw, fftbands*sizeof(float));
+			fftpoolI=(double*)realloc(fftpoolI, fftbands_new*sizeof(double));
+			fftpoolQ=(double*)realloc(fftpoolQ, fftbands_new*sizeof(double));
+			pandataI=(double*)realloc(pandataI, fftbands_new*sizeof(double));
+			pandataQ=(double*)realloc(pandataQ, fftbands_new*sizeof(double));
+			window=(double*)realloc(window, fftbands_new*sizeof(double));
+			fdraw=(float*)realloc(fdraw, fftbands_new*sizeof(float));
+			fftmap=(int*)realloc(fftmap, fftbands_new*sizeof(int));			// does not really have to be that large, but let it be ..
+			fftmap16=(int*)realloc(fftmap16, fftbands_new*sizeof(int));		// does not really have to be that large, but let it be ..
+		}
 
-			oldfftbands=fftbands;
+		if ((fftbands!=fftbands_new)||(fftbandsneeded!=fftbandsneeded_new)||(skipzone != skipzone_new))
+		{
+			// update with new values from OnTimer(), since we may have changed the range
+			fftbands=fftbands_new;
+			fftbandsneeded=fftbandsneeded_new;
+			skipzone=skipzone_new;
+
+			//we cant have floating point mathematics at the amount needed, so we will pre-calculate offsets inside 
+			//fdraw[] structure for both, the 'fftbandsneeded' number of points and 16kHz first column
+			
+			fftstart=((fftbands)*16000);
+			fftstart/=96000;					// fftstart is now the starting address for the 16kHz inside 96kHz fft data area
+			fftend=((fftbands)*(16000+64000));
+			fftend/=96000;
+
+			fftincrement=(fftend-fftstart);		// how many points for the FFT range
+			fftincrement/=fftbandsneeded;	
+
+			for (k=0; k<fftbandsneeded; k++)
+			{
+				fdrawoffset=fftincrement;
+				fdrawoffset*=k;
+				fdrawoffset+=fftstart;
+
+				fftmap[k]=(modf(fdrawoffset, &dummydbl)>=0.5)?ceil(fdrawoffset):floor(fdrawoffset);	//just a round() ...				
+			}
+
+			// and now for the first 16kHz
+			fftstart=0;									// fftstart is now the starting address for the 0kHz inside 96kHz fft data area
+			fftend=((fftbands)*16000);
+			fftend/=96000;
+
+			fftincrement=(fftend-fftstart);				// how many points for the FFT range
+			fftincrement/=(fftbandsneeded/4);			//fftbandsneeded represents the 64kHz plot, so 16kHz is a 1/4 of that
+
+			for (k=0; k<((fftbandsneeded/4)+1); k++)	//+1 for safety
+			{
+				fdrawoffset=fftincrement;
+				fdrawoffset*=k;
+				fdrawoffset+=fftstart;
+
+				fftmap16[k]=(modf(fdrawoffset, &dummydbl)>=0.5)?ceil(fdrawoffset):floor(fdrawoffset);	//just a round() ...				
+			}
+
+			//Build FFT window. 
+			for (k=0; k<fftbands; k++)
+			{
+				//Rectangular
+				window[k]=1.0;
+
+				//Blackman-Harris (http://www.katjaas.nl/FFTwindow/FFTwindow.html)
+				//window[k]=0.35875 + (0.48829*cos(2*PI*k/fftbands)) + (0.14128*cos(4*PI*k/fftbands)) + (0.01168*cos(6*PI*k/fftbands));
+
+				//Blackman (http://www.katjaas.nl/FFTwindow/FFTwindow.html)
+				//window[k]=0.42 - (0.5*cos(2*pi*k/fftbands)) - (0.08*cos(4*pi*k/fftbands));
+
+			}
 		}
 
 		l_pandata_wptr=pandata_wptr;		
 
 		while (((pandata_rptr&PANDATAMASK)!=(l_pandata_wptr&PANDATAMASK))&&(run_panadaptertask))
 		{
-			WaitForSingleObject(sleepevent, 0);					// give away timeslice
+			//WaitForSingleObject(sleepevent, 0);					// give away timeslice
 			//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
+
+			iterations++;
+			if (!(iterations%10000))
+				WaitForSingleObject(sleepevent, 1);					// give away timeslice
+			else
+				WaitForSingleObject(sleepevent, 0);					// give away timeslice
 
 			switch(panstate)
 			{
@@ -364,7 +472,12 @@ unsigned int dbpooloffset=0;
 			case PAN_DATA:
 				while (((pandata_rptr&PANDATAMASK)!=(l_pandata_wptr&PANDATAMASK))&&(run_panadaptertask))
 				{
-					WaitForSingleObject(sleepevent, 0);					// give away timeslice
+					iterations++;
+					if (!(iterations%1000))
+						WaitForSingleObject(sleepevent, 1);					// give away timeslice
+					else
+						WaitForSingleObject(sleepevent, 0);					// give away timeslice
+
 					//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
 					
 					for (; i<8; i++)
@@ -384,14 +497,14 @@ unsigned int dbpooloffset=0;
 					}
 
 					if (i==8)				// all magic done?
-					{						
-						if ((panstate == PAN_DATA)&&(pandatalen >=(fftbands*4)))
+					{											
+						if ((panstate == PAN_DATA)&&(pandatalen >=((fftbands*4)+(skipzone*4))))	// we need to have at least enough samples for FFT (16-bit I, 16-bit Q and 8-IQsample ignore zone what is captured while frequency was changed)
 						{
 							//new magic found, so we have to process the current pandata buffer and inject new FFT!
 							//note, that (int)(*(int*)&freqbuff[0]) contains current starting frequency!
 							
-							// copy last 16 IQ pairs to FFT source buffer
-							for (i=0, j=(pandatalen&0xFFFFFFF4)-(fftbands*4); i<fftbands; i++)
+							// copy last IQ pairs to FFT source buffer
+							for (i=0, j=skipzone*4; i<fftbands; i++)
 							{
 								WaitForSingleObject(sleepevent, 0);					// give away timeslice
 								//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
@@ -403,9 +516,45 @@ unsigned int dbpooloffset=0;
 								j+=2;
 							}
 							
+							//apply window now (we are using rectangular, so do not care)
+							
+							//for (i=0; i<fftbands; i++)
+							//{
+							//	pandataI[i]*=window[i];
+							//	pandataQ[i]*=window[i];
+							//}
+							
 							fft_double(fftbands, 0, pandataQ, pandataI, fftpoolQ, fftpoolI);
 
-							for(i=0; i<fftbands/2; i++)	//Use FFT_LEN/4 since the data is mirrored within the array.
+							// have to swap now first and a second half of the FFT results. pandata is used as buffer
+
+							for (i=0; i<fftbands/2; i++)
+							{
+								pandataI[i]=fftpoolI[i];
+								pandataQ[i]=fftpoolQ[i];
+							}
+
+							for (i=fftbands/2, k=0; i<fftbands; i++, k++)
+							{
+								fftpoolI[k]=fftpoolI[i];
+								fftpoolQ[k]=fftpoolQ[i];
+							}
+
+							for (i=fftbands/2, k=0; i<fftbands; i++, k++)
+							{
+								fftpoolI[i]=pandataI[k];
+								fftpoolQ[i]=pandataQ[k];
+							}
+
+							//now normalize the power according to actual samples used
+
+							for (i=0; i<fftbands; i++)
+							{
+								fftpoolI[i]/=(fftbands/8);
+								fftpoolQ[i]/=(fftbands/8);
+							}
+
+							for(i=0; i<fftbands; i++)
 							{
 								WaitForSingleObject(sleepevent, 0);					// give away timeslice
 								//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
@@ -415,7 +564,7 @@ unsigned int dbpooloffset=0;
 								
 								fdraw[i] = Decibels(re, im);			//get Decibels in 0-110 range
 
-								if (fdraw[i]) // first value in array is zero, so ignore
+								if (fdraw[i]) // first value in array is zero(?), so ignore
 								{
 									dbminmaxpool[dbpooloffset&0xFFF] = (float)fdraw[i];
 									dbpooloffset++;
@@ -423,24 +572,29 @@ unsigned int dbpooloffset=0;
 							}
 
 							// normalize data for graphic display now!
-							filterfft(fdraw, fftbands/2);
-							for (i=0; i<fftbands/2; i++)
-								fdraw[i]=(fdraw[i]/110.0f)*1279.0f;		// 0db -> 1279
+							filterfft(fdraw, fftbands);
+							for (i=0; i<fftbands; i++)
+								fdraw[i]=(fdraw[i]/110.0f)*1279.0f;		// 110db -> 1279
 
-							//add scanline data. We have window which is n pixels wide and are scanning with 8 fft points per 
-							//96kHz, with 64kHz frequency step.
+							// We do have 96kHz sampling rate, but our step frequency is 64kHz.
+							// This is needed to have band overlap of 16kHz from both sides, so we will not have 
+							// the edges of the scan area fading away because of DDC filtering. Therefore we will 
+							// use frequency position 16kHz higher than indicated, as we are starting plotting from 
+							// f+16kHz, except when plotting first column on the screen.
 
+							(int)(*(int*)&freqbuff[0])-=(96000/2);	// we were bumping up the WFO frequency so the lower complex FFT boundary is actually our minimum frequency
 							freqpos=(int)(*(int*)&freqbuff[0]);
+							freqpos+=16000;
 
 							//for safety, filter out the values what are out of bounds
-							if (freqpos > _lastrangemax)
-								freqpos=_lastrangemax;
-							else if (freqpos < _lastrangemin)
-								freqpos=_lastrangemin;
+							if (freqpos > _freqrangemax)
+								freqpos=_freqrangemax;
+							else if (freqpos < _freqrangemin)
+								freqpos=_freqrangemin;
 
-							freqpos-=panentry.startfreq;		// get frequency offset inside fft window
+							freqpos-=_freqrangemin;		//panentry.startfreq;		// get frequency offset inside fft window
 							freqpos*=(rcWaterFall.right-1);
-							freqpos/=panentry.startfreq+(panentry.steps*panentry.stepfreq);
+							freqpos/=_freqspan;			//(panentry.steps*panentry.stepfreq)+64000;
 
 							if (maxfreq<(int)(*(int*)&freqbuff[0]))
 								maxfreq=(int)(*(int*)&freqbuff[0]);
@@ -448,21 +602,48 @@ unsigned int dbpooloffset=0;
 							if (minfreq>(int)(*(int*)&freqbuff[0]))
 								minfreq=(int)(*(int*)&freqbuff[0]);
 							
-							// take from the middle of fft data as much bands as needed
-							for (i=0, j=(fftbands/4)-(fftbandsneeded/2); i<fftbandsneeded; i++, j++)
-							{
-								if ((freqpos+i)<=(rcWaterFall.right-1))
-									MemDC.SetPixelV(freqpos+i, rcWaterFall.bottom-1, Intensity(fdraw[j]));
-							}
-
+							// Plot data. Freqpos is already corrected by 16kHz, now we have to find the appropriate 
+							// FFT points to plot. the fdraw[] structure is likely having more points than we need, 
+							// so what we do is, that we will cut off the 64kHz chunk of FFT data and then generate 
+							// the required number of points from there.
+								
 							/*
-							for (j=0; j<rcWaterFall.right; j++)
-							{
-								//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
-								WaitForSingleObject(sleepevent, 0);
-								MemDC.SetPixelV(j, rcWaterFall.bottom-1, RGB(0, 0, rand()%255));
+							for (i=0; i<fftbandsneeded; i++)	//plot the whole range
+							{									
+								if ((freqpos+i)<=(rcWaterFall.right-1))
+									MemDC.SetPixelV(freqpos+i, rcWaterFall.bottom-1, Intensity(fdraw[fftmap[i]]));
 							}
 							*/
+
+							{
+							double avgval=0;
+							int avgcnt=0;
+
+								for (i=0, j=0; ((i<fftbands)&&(j<fftbandsneeded)); i++)
+								{
+									avgval+=fdraw[i];
+									avgcnt++;
+
+									if (i==fftmap[j])
+									{
+										avgval/=avgcnt;
+										if ((freqpos+j)<=(rcWaterFall.right-1))
+											MemDC->SetPixelV(freqpos+j, rcWaterFall.bottom-1, Intensity(avgval));
+										j++;
+										avgval=0;
+										avgcnt=0;
+									}
+								}
+							}
+							
+							if ((int)(*(int*)&freqbuff[0]) == _freqrangemin)		// plot first 16kHz as well
+							{
+								for (i=0; i<((fftbandsneeded/4)+1); i++)		//+1 for safety, that we will not have blank pixels because of non-integer division
+								{							
+									if ((freqpos+i)<=(rcWaterFall.right-1))
+										MemDC->SetPixelV(0+i, rcWaterFall.bottom-1, Intensity(fdraw[fftmap16[i]]));
+								}
+							}						
 						}						
 
 						i=0;				// reset i for new magic scan
@@ -530,27 +711,7 @@ unsigned int dbpooloffset=0;
 				break;
 			}
 		}
-
-
-	
-		//CBitmap *pOldBitmap = (CBitmap*) MemDC.SelectObject(&MemBitmap);
-		
-		//CBrush bkBrush(HS_FDIAGONAL,RGB(0,rand()%255,0));	// Creates a brush with random shades of green. The rand()%255 generates a value between 0 and 255 randomly. 
-		//MemDC.FillRect(rcWaterFall,&bkBrush);
-
-		/*
-		for (j=0; j<rcWaterFall.right; j++)
-		{
-			MemDC.SetPixelV(j, rcWaterFall.bottom-1, RGB(0, 0, rand()%255));
-		}
-		*/
-		//pDC->BitBlt(0,0,rcWaterFall.right,rcWaterFall.bottom,&MemDC,0,0,SRCCOPY);	// Copies the bitmap from the memory dc to the pdc using a fast bitblt function call.		
 	}
-
-	//MemDC.SelectObject(pOldBitmap);
-
-	//ReleaseDC(pDC);
-	//ReleaseDC(&MemDC);
 
 	free(pandataI);
 	free(fftpoolI);
@@ -558,6 +719,9 @@ unsigned int dbpooloffset=0;
 	free(fftpoolQ);
 	free(pandata);
 	free(fdraw);
+	free(window);
+	free(fftmap);
+	free(fftmap16);
 
 	panadaptertask_exited=true;
 }
@@ -567,23 +731,26 @@ long lastclickY=0;
 
 void CPanadapterDialog::OnTimer(UINT nIDEvent) 
 {
-char prntxt[64];
-static int localmagic=0;
+char prntxt[256];
 double freqrangemin, freqrangemax;
-long long _freqrangemin, _freqrangemax, _freqspan;
+
+static int localmagic=0;
 static long long  _selectedfreq=0;
 static long long passesignored1=0, passesignored2=0;
+
 CRect rect;
 int i;
 float fmin, fmax;
+unsigned int steps, fftpoints, fftpointsP2, skip;
+
 
 	if (nIDEvent == ID_CLOCK_TIMER)
 	{
-		CBitmap *pOldBitmap = (CBitmap*) MemDC.SelectObject(&MemBitmap);
-		pDC->BitBlt(0,0,rcWaterFall.right,rcWaterFall.bottom,&MemDC,0,0,SRCCOPY);	// Copies the bitmap from the memory dc to the pdc using a fast bitblt function call.
+		CBitmap *pxOldBitmap = (CBitmap*) MemDC->SelectObject(MemBitmap);
+		pDC->BitBlt(0,0,rcWaterFall.right,rcWaterFall.bottom,MemDC,0,0,SRCCOPY);	// Copies the bitmap from the memory dc to the pdc using a fast bitblt function call.
 		//bitblt internally by one line and add a new scanline at the bottom
-		MemDC.BitBlt(0,0,rcWaterFall.right,rcWaterFall.bottom,&MemDC,0,1,SRCCOPY);	// Copies the bitmap from the memory dc to the pdc using a fast bitblt function call.
-		MemDC.SelectObject(pOldBitmap);
+		MemDC->BitBlt(0,0,rcWaterFall.right,rcWaterFall.bottom,MemDC,0,1,SRCCOPY);	// Copies the bitmap from the memory dc to the pdc using a fast bitblt function call.
+		MemDC->SelectObject(pxOldBitmap);
 
 		c_FreqRangeSlider.GetRange(freqrangemin, freqrangemax);
 
@@ -596,11 +763,12 @@ float fmin, fmax;
 
 		freqrangemin=_freqrangemin;
 		freqrangemax=_freqrangemax;
+
 		_freqspan=_freqrangemax-_freqrangemin;
 		if (!_freqspan)
 			_freqspan=1;		// avoid divide by 0
 
-		sprintf_s(prntxt, 64, "%.3f-%.3f MHz (%d-%d)", freqrangemin/1000000, freqrangemax/1000000, minfreq, maxfreq);
+		sprintf_s(prntxt, 256, "%.3f-%.3f MHz (%d-%d) [%d+%d*%d %dsps]", freqrangemin/1000000, freqrangemax/1000000, minfreq, maxfreq, panentry.startfreq, panentry.steps, panentry.stepfreq, panentry.samples);
 		m_RangeInfo.SetWindowText(prntxt);
 
 		GetDlgItem(IDC_WATERFALL)->GetWindowRect(&rect);
@@ -609,7 +777,7 @@ float fmin, fmax;
 		passesignored1++;
 		passesignored2++;
 
-		if (passesignored2 > 20)
+		if (passesignored2 > 10)
 		{
 			passesignored2=0;
 
@@ -626,57 +794,65 @@ float fmin, fmax;
 		}
 
 		if (((_lastrangemin != _freqrangemin)||
-			(_lastrangemax != _freqrangemax))&&(passesignored1 > 20))		// just do  not update full-speed, to save some time on meaningless updates
+			(_lastrangemax != _freqrangemax))&&(passesignored1 > 10))		// just do  not update full-speed, to save some time on meaningless updates
 		{
 			passesignored1=0;
 
 			// frequency range has changed, so calculate new pantable and ask datatask to send it to radio
-			{
-			unsigned int steps, fftpoints, fftpointsP2;
-
-				steps=_freqspan/64000;				// how much steps do we ned to get the entire range covered
-				if (!steps)
-					steps=1;
-
-				fftpoints=rect.right-rect.left;		// how much fft points we need to display for each step
-				fftpoints/=steps;
-				fftpoints++;						// just have one point for overlapping, since frequency position may jitter by one scanline
-
-				//make fftpoints power of two now
-				for (i=0, fftpointsP2=2; i<16; i++)
-				{
-					if ((1<<i)>=fftpoints)
-					{
-						fftpointsP2=1<<(i+1);		//multiple by two on the fly, as output fft points are symmetrical, so we need twice as much data to process
-						break;
-					}
-				}
-					
-				EnterCriticalSection(&CriticalSection);		// lock while updating globals to avoid confusion in Panadapter thread (may be needed, may be not)
-				//fill in the structure and request pantable update
-				panentry.startfreq=_freqrangemin;
-				panentry.steps=steps;
-				panentry.samples=fftpointsP2;
-				// the rest of the structure stays the same as set by OnInitDialog()
-				
-				fftbands=fftpointsP2;				//update global fftbands
-				fftbandsneeded=fftpoints;			//bands number actually needed to update display, +2 for safety
-				
-				do_pantableupdate=true;
-				LeaveCriticalSection(&CriticalSection);
-
-				maxfreq=0;
-				minfreq=32000000;
-			}
 			
+			steps=_freqspan/64000;				// how much steps do we ned to get the entire range covered
+			if (!steps)
+				steps=1;
+
+			fftpoints=rect.right-rect.left;		// how much fft points we need to display for each step
+			fftpoints/=steps;
+			fftpoints++;						// just have one point for overlapping, since frequency position may jitter by one scanline
+
+			//make fftpoints power of two now
+			for (i=0, fftpointsP2=2; i<16; i++)
+			{
+				if ((1<<i)>=fftpoints)
+				{
+					fftpointsP2=1<<(i+1);		//multiple by two on the fly, as for output complex FFT both sides (-N and +N) we need double the points
+					break;
+				}
+			}
+
+			if (fftpointsP2 < 16)
+				skip=0;
+			else if (fftpointsP2 < 32)
+				skip=24;
+			else
+				skip=32;
+				
+			//EnterCriticalSection(&CriticalSection);		// lock while updating globals to avoid confusion in Panadapter thread (may be needed, may be not)
+			//fill in the structure and request pantable update
+			panentry.startfreq=_freqrangemin+(96000/2);	// Complex FFT gives us 48kHz up and down from LO frequency, so we need to bump up the freq
+			panentry.steps=steps;
+			panentry.samples=fftpointsP2;
+			panentry.skip=skip;
+			// the rest of the structure stays the same as set by OnInitDialog()
+			
+			// cant update immediately, so ask panadapter task to use new values for next pass 
+			fftbands_new=fftpointsP2;				//update global fftbands
+			fftbandsneeded_new=fftpoints;			//bands number actually needed to update display, +2 for safety
+			skipzone_new=skip;						// number of samples (IQ pairs) to skip after frequency change
+			
+			do_pantableupdate=true;
+			//LeaveCriticalSection(&CriticalSection);
+
+			//cause received frequency entries minimums and maximums updated
+			maxfreq=0;
+			minfreq=32000000;
+
 			_lastrangemin=_freqrangemin;
 			_lastrangemax=_freqrangemax;
-		}
+		}		
 
 		c_ColorRangeSlider.GetRange(dbrangemin, dbrangemax);
 
 		if ((lastclickX > rect.left)&&(lastclickX < rect.right) && 
-			(lastclickY > rect.top) && (lastclickY < rect.bottom))
+			(lastclickY > rect.top)&&(lastclickY < rect.bottom))
 		{
 			lastclickX-=rect.left;		// get coordinate inside waterfall window
 
@@ -689,7 +865,7 @@ float fmin, fmax;
 			lo_freq=_selectedfreq;
 			tune_freq=_selectedfreq;
 
-			//lo_changed=true;			// this is a indicator for tunechanged(), that no action should be taken adjusting LO boundaries.
+			//lo_changed=true;			// this is a indicator for tunechanged(), that no action should be taken adjusting LO boundaries. (deprecated)
 			update_lo=true;				// show datatask, that LO has to be changed
 
 			//Now sync HDSDR display
@@ -703,7 +879,7 @@ float fmin, fmax;
 			_selectedfreq=lo_freq;
 		}
 
-		sprintf_s(prntxt, 64, "%d (%d) [%d]", magicsfound, magicsfound-localmagic, _selectedfreq);
+		sprintf_s(prntxt, 256, "%d (%d) [%d]", magicsfound, magicsfound-localmagic, _selectedfreq);
 		m_ActiveInfo.SetWindowText(prntxt);
 
 		lastclickX=0;
@@ -782,13 +958,49 @@ void CPanadapterDialog::PostNcDestroy()
 // We have to handle close event, as we do not have parent object what would perform destruction for us
 void CPanadapterDialog::OnClose()
 {
+HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
+
 	run_panadaptertask=false;
 
 	while(!panadaptertask_exited)	// wait until panadapter task finishes
-	{}
+		WaitForSingleObject(sleepevent, 1);
+
+	// release what we had for bitmap
+	
+	//MemDC.SelectObject(pOldBitmap);
+	//MemBitmap->Detach();
+	//MemBitmap->DeleteObject();
+	delete MemBitmap;
+	delete MemDC;
+
+	//DeleteDC(MemDC);
+	//ReleaseDC(pDC);
+
+	// reset globals
+	do_pantableupdate=false;
+
+	fftbands=0;
+	fftbandsneeded=0;
+	skipzone=0;
+
+	fftbands_new=8;
+	fftbandsneeded_new=4;
+	skipzone_new=8;
+
+	dbrangemin=0;
+	dbrangemax=1100;
+
+	panstate=PAN_MAGIC;
+	_freqrangemin=0;
+	_freqrangemax=32000000; 
+	_freqspan=32000000;
+
+	_lastrangemin=32000000;		// cause immdiate update on pass 1
+	_lastrangemax=0;
 
 	if (m_pmodelessPanadapter)
 	{
 		m_pmodelessPanadapter->DestroyWindow();
+		m_pmodelessPanadapter=NULL;
 	}
 }

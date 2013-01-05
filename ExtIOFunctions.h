@@ -37,7 +37,7 @@ extern void (* ExtIOCallback)(int, int, float, void *);
 #define MIN_FW_MINOR	70
 
 #define MIN_FW_MAJOR_PAN	1
-#define MIN_FW_MINOR_PAN	93		// minimum version needed to run panadapter
+#define MIN_FW_MINOR_PAN	95		// minimum version needed to run panadapter
 
 #define LIB_MIN_MAJOR	1
 #define LIB_MIN_MINOR	2
@@ -145,6 +145,8 @@ typedef struct
 	DWORD	steps;		// how many steps to increment before going to next table entry
 	WORD	magic_I;	// magic token - if three consecutive I and Q pairs are equal to these values, it indicates the beginning of the panoramic packet of particular kind
 	WORD	magic_Q;
+	WORD	skip;		// how many IQ pairs to skip after frequency change
+	WORD	dummy;		// make structure multiples of 32byte
 } PANENTRY;
 
 #endif // !defined(AFX_EXTIOCLASS_H__247C1094_0293_40d5_846A_6CC900C82E80__INCLUDED_)
