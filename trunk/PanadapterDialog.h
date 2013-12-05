@@ -20,8 +20,6 @@ public:
 	CRangeSlider c_FreqRangeSlider;
 	CRangeSlider c_ColorRangeSlider;
 
-
-
 	HMODULE hParent;
 
 	//void filterfft(float* fftpool, int fftbands);

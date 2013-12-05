@@ -31,7 +31,7 @@
 extern void (* ExtIOCallback)(int, int, float, void *);
 
 #define DLLVER_MAJOR	1
-#define DLLVER_MINOR	30
+#define DLLVER_MINOR	39
 
 #define MIN_FW_MAJOR	1
 #define MIN_FW_MINOR	70
@@ -39,9 +39,13 @@ extern void (* ExtIOCallback)(int, int, float, void *);
 #define MIN_FW_MAJOR_PAN	1
 #define MIN_FW_MINOR_PAN	95		// minimum version needed to run panadapter
 
+#define MIN_FW_MAJOR_TX8M	1
+#define MIN_FW_MINOR_TX8M	99		// minimum version needed to run TX8M
+
 #define LIB_MIN_MAJOR	1
 #define LIB_MIN_MINOR	2
-#define LIB_MIN_MICRO	6
+//#define LIB_MIN_MICRO	6
+#define LIB_MIN_MICRO	2
 #define LIB_MIN_NANO	0
 
 #define DATAMASK	0x3FFFF
@@ -113,7 +117,8 @@ extern int HWType;
 #define		LIBMODE_16BMA		4
 #define		LIBMODE_16ABPAN		5	//A, B=panscan
 #define		LIBMODE_16BAPAN		6	//A=panscan, B
-#define		LIBMODE_16AB		7
+//#define		LIBMODE_16AB		7
+#define		LIBMODE_16IABQ		7
 
 #define		LIBMODE_OFF			10
 #define		LIBMODE_SPEEDTEST	11
@@ -133,7 +138,7 @@ extern int HWType;
 #define		CHMODE_BMA		LIBMODE_16BMA		// B-A
 #define		CHMODE_ABPAN	LIBMODE_16ABPAN		// A, B=panscan
 #define		CHMODE_BAPAN	LIBMODE_16BAPAN		// A=panscan, B
-
+#define		CHMODE_IABQ		LIBMODE_16IABQ		// ChA_I=I, ChB_I=Q
 
 // structure for running the panoramic scan by
 typedef struct

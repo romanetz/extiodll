@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="Windows-1252"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="9.00"
+	Version="9,00"
 	Name="ExtIODll"
 	ProjectGUID="{E07DAACE-5E33-412A-92D1-587870F8CC41}"
 	RootNamespace="ExtIO_SDR_MK1"
@@ -51,7 +51,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				InlineFunctionExpansion="1"
-				PreprocessorDefinitions="SERIAL_NO_OVERLAPPED; WIN32;_WINDOWS;_USRDLL;WINVER=0x0500;"
+				PreprocessorDefinitions="MEMWATCH; SERIAL_NO_OVERLAPPED; WIN32;_WINDOWS;_USRDLL;WINVER=0x0500;"
 				StringPooling="false"
 				MinimalRebuild="false"
 				RuntimeLibrary="0"
@@ -150,7 +150,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				PreprocessorDefinitions="SERIAL_NO_OVERLAPPED; WIN32;_DEBUG;_WINDOWS;_USRDLL;WINVER=0x0500;"
+				PreprocessorDefinitions="MEMWATCH; SERIAL_NO_OVERLAPPED; WIN32;_DEBUG;_WINDOWS;_USRDLL;WINVER=0x0500;"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -177,7 +177,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libusb.lib"
+				AdditionalDependencies="libusb.lib comctl32.lib"
 				OutputFile=""
 				LinkIncremental="2"
 				SuppressStartupBanner="true"
@@ -226,6 +226,10 @@
 			Name="Source Files"
 			Filter="cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 			>
+			<File
+				RelativePath=".\AdvancedDialog.cpp"
+				>
+			</File>
 			<File
 				RelativePath=".\DialogClasses.cpp"
 				>
@@ -291,6 +295,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\MainDialog.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\MemDC.h"
 				>
 			</File>
@@ -338,6 +346,10 @@
 			Filter="h;hpp;hxx;hm;inl"
 			>
 			<File
+				RelativePath=".\AdvancedDialog.h"
+				>
+			</File>
+			<File
 				RelativePath=".\DialogClasses.h"
 				>
 			</File>
@@ -351,6 +363,10 @@
 			</File>
 			<File
 				RelativePath=".\ExtIOFunctions.h"
+				>
+			</File>
+			<File
+				RelativePath=".\MainDialog.h"
 				>
 			</File>
 			<File
@@ -459,6 +475,43 @@
 				</File>
 			</Filter>
 		</Filter>
+		<Filter
+			Name="memwatch"
+			>
+			<File
+				RelativePath=".\memwatch-2.71\memwatch.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\memwatch-2.71\memwatch.h"
+				>
+			</File>
+			<Filter
+				Name="Documentation"
+				>
+				<File
+					RelativePath=".\memwatch-2.71\FAQ"
+					>
+				</File>
+				<File
+					RelativePath=".\memwatch-2.71\gpl.txt"
+					>
+				</File>
+				<File
+					RelativePath=".\memwatch-2.71\README"
+					>
+				</File>
+				<File
+					RelativePath=".\memwatch-2.71\USING"
+					>
+				</File>
+			</Filter>
+		</Filter>
+		<File
+			RelativePath=".\AdvancedDialog.htm"
+			DeploymentContent="true"
+			>
+		</File>
 		<File
 			RelativePath="ReadMe.txt"
 			>

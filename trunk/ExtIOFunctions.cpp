@@ -19,7 +19,7 @@
 
 	This DLL provides an empty core for implementing hardware support functionality
 	for the Winrad Software Defined Radio (SDR) application from Alberto Di Bene (http://www.weaksignals.com/)
-	and its offsprings supporting the same ExtIO DLL format, most notably the outstanding HDSDR software (http://hdsdr.org)
+	and its offsprings supporting the same ExtIO DLL format, most notably the outstanding HDSDR software (http://hdsdr.de)
 
 	As the Winrad source is written on Borland C-Builder environment, there has been very little 
 	information available of how the ExtIO DLL should be implemented on Microsoft Visual Studio 2008
@@ -70,18 +70,89 @@
 
 	v1.35	04.01.2013	-	Test version - Lots of stuff fixed in panadapter. Does not work perfectly, but is more or less usable.
 						-	Fixes for tuning sync and A/B frequeny switching and storing
+	
+	v1.36	05.07.2013	-	Preliminary TX8M support
+
+	v1.37	17.11.2013	-	Added SetRegistryKey("Satrian") in InitInstance() to maintain registry access compatibility
+							with UAC
+						-	ExtIO DLL is now a default data method (was audio interfaces earlier)
+						-	ExtIORegistryUpdateTask() now writes all changes down after every second and checks update flag in 100ms
+						    (was 10sec and 1sec)
+						-	ExtIODialog stuff modified to use HWType field, not fetching value from registry.
+						-	Debug console initialization and removal moved to Init/ExitInstance() code
+
+	v1.38	21.11.2013	-	Re-layouted GUI to acommodate RF gain control controls
+						-	LibUSB-win32 version checking is now relaxed to 1.2.2.0, since we can live with this and Atmel FLIP utility is 
+							reverting us to old version. Not nice, but could still be used,	so lets not complain.
+						-	Replaced all _beginthread stuff with AfxBeginThread() to be more MCF compatible
+						-	Panadapter speed slider made to work
+						-	OnTimer() disables scroll timer temporarily to avoid any possibility for recursion (although there probably wasnt any)
+						-	UI Controls conditional enabling and disabling logic cleaned up.
+						-	Included memwatch 2.71 to the build from http://www.linkdata.se/sourcecode/memwatch/ 
+							Old, but functional, since our dynamic memory allocation is using ANSI memory functions anyway.
+						-	Fixed task scheduling issues related to panadapter and ExtIODataTask()
+						-	Eliminated ExtIOCallbackTask() associated double buffering. HDSDR does not block on data callback
+							and therefore callback is possible to initiate straight from ExtIODataTask()
+
+	v1.40	5.12.2013	-	UI converted to tabbed dialog (Although only ExtIO tab i simplemented)
+						-	Dialog initialization and cleanup revisited and (most of the) leaks fixed
+
 
 
 	To Do:
 
 		- Make diversity mode work so that both channels could be tweaked, so will get 2x360deg span
-		- Diversity and gain selection for ExtIO mode
+		* Diversity and gain selection for ExtIO mode
 		- Sample rate switching for ExtIO mode
 		x Cache size adjustment control for used form
 		- A/B/HDSDR channel selection with LO and freq feedback through callback
-		- Synchronous tuning
-		- Last freq etc. parameters update for registry
+		* Synchronous tuning
+		* Last freq etc. parameters update for registry
 		* LO frequency following when tuning reaches the border
+		* Make Extio DLL as data source a default selection
+		- Manual gain control dialog implementation (Add firmware command as well)(for older HDSDR versions with no gain slider built-in)
+		- Rework registry updates, so the local stub could be used when UAC is enabled!
+		- Fix frequency storing in registry, so each mode will store its own frequency value correctly (A, A+pan = same; B, b+pan=sam etc., TX8m etc.)
+		* Do something about the fact that FLIP installs 1.2.2.0 libusb driver instead of 1.2.2.6 and ExtIO complains. Are we actually compatible with 
+		  1.2.2.0 as well?
+		- Create twodimensional/class array of enabled/disabled items, frequencys etc., indexed by mode, so we know where the stuff is stored!
+		* For UI, put all the controls enabling and disabling logic onto ExtIODialog::EnableDisableControls()
+		- At startup, use single place to read all globals from registry (ExtIODll::InitInstance()? InitHW()?), then use values to 
+		  set states at InitDialog() etc. after that.
+		* replace all _beginthread stuff with AfxBeginThread()
+		* Fix bug where closing the ExtIO dialog while panadapter is open (what also causes panadapter to close erratically!)
+		  and then re-opening the dialog and panadapter will crash the dll and extio
+	    - clean up thread and other function declarations to .h files
+		- panadapter shows some banding at some resolutions.
+		* panadapter speed slider not working
+		- panadapter speed slider last value not stored in registry
+		* panadapter speed slider is working backwards
+		- ExtIO button has to be pressed twice to get the Extio UI showing
+		* ShowDebug button seems broken (not always in sync with registry)
+		- See if something can be done about sound breakup when phase is changed (not to reset entire buffer or something..)
+		- Put globals in separate .cpp and .h file
+		- Deal with startup error recovery if radio is not connected
+		- Try to do something no HDSDR restart would be needed if radio disconnected and re-connected.
+		? Could the scrolltimer variable modification at OnHscroll() cause fatal race condition when OnTimer() tries to re-enable timer?
+		- Adjust gain for Panadapter dependent on width, so the intensity of the picture stays the same.
+		- Make the Panadapter intensity slider default less than maximum and reduce gain, so the intensity could also be turned down, if needed.
+		* Panadapter takes too much resource from CPU
+		- See if there is a better way dealing with memwatch output redirection to _cprintf then just #ifndef ENABLEMWFILEWRITES
+		* AGC setting is not saved in registry
+		* RF gain sliders not saved in registry
+		- RF gain and AGC functions are not working if  extio is used in serial mode. (rfga, rfgb, agc commans not initiated)
+
+
+	To Do v2.x:
+
+		- Full rework for new HDSDR ExtioDLL example from LC
+		- Update google code with new/up to date DLL example code from LC (maintain two branches -- legacy and new)		
+		- Implement firmware update function through ExtIO dll, including automated FLIP and Atmel driver installation. 
+		  Have Exe what allows invoking this feature from external app as well for non-hdsdr users.
+	    - Fix panadapter
+		- Network support! + UDP discovery + UDP IP address renewal for radio (for peer-to-peer with direct cable connections)
+		- Port to libusbK for Win8 compatibility (http://code.google.com/p/usb-travis/downloads/list)
+		- See if void CMainDialog::ShowTabDlg(int tabSel) handles multiple monitors right (do we have screen coordinates really?)
 
 */
 
@@ -90,15 +161,17 @@
 #include "stdafx.h"
 
 #include "ExtIODll.h"
-#include "ExtIODialog.h"
+//#include "ExtIODialog.h"
+#include "MainDialog.h"
 #include "ExtIOFunctions.h"
+#include "PanadapterDialog.h"
 
 #include "libusb\lusb0_usb.h"
 
 //serial.h is included from ExtIOFunctions.h
 
 #include <conio.h>		// gives _cprintf()
-#include <process.h>	// gives _beginthread()
+#include <process.h>	// gives threading
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -106,9 +179,10 @@ static char THIS_FILE[]=__FILE__;
 #define new DEBUG_NEW
 #endif
 
+UINT ExtIODataTask(LPVOID dummy);
+UINT ExtIOCallbackTask(LPVOID dummy);
 
-void ExtIODataTask(void* dummy);
-void ExtIOCallbackTask(void* dummy);
+extern HANDLE sleepevent;
 
 /*
 
@@ -128,8 +202,10 @@ Some notes:
 #error SERIAL_NO_OVERLAPPED has to be defined
 #endif
 
-CExtIODialog* m_pmodeless;
-bool hasconsole=false;
+//CExtIODialog* m_pmodeless;
+extern CPanadapterDialog* m_pmodelessPanadapter;
+CMainDialog* m_pmodeless;
+//bool hasconsole=false;
 
 unsigned long lo_freq=4624000L;
 unsigned long tune_freq=0;
@@ -166,27 +242,163 @@ int SyncGain;
 
 unsigned long lasttune_freqA=-1;	// init so, that HDSDR would update immediately on startup
 unsigned long lasttune_freqB=-1;
+unsigned long lasttune_freqC=-1;
 
 extern volatile bool update_lo;
 unsigned long lastlo_freqA=-1;
 unsigned long lastlo_freqB=-1;
+unsigned long lastlo_freqC=-1;
 
 extern int Transparency;
 
 long IQSampleRate;
 
-int GainA, GainB;
+int IFGainA, IFGainB;
+int RFGainA, RFGainB;
+int AGC;
 int PhaseCoarse, PhaseFine;
 int DebugConsole;
 
 extern volatile bool update_phaseA;
-extern volatile bool update_gain;
+extern volatile bool update_IFgain;
+extern volatile bool update_RFgain;
 
 usb_dev_handle *dev = NULL;					// device handle to be used by libusb
 const struct usb_version* libver = NULL;	// libusb version information
 //char tmp[128];
 
 CWnd* MainWindow;
+
+usb_dev_handle *open_dev(void)
+{
+struct usb_bus *bus;
+struct usb_device *dev;
+
+    for (bus = usb_get_busses(); bus; bus = bus->next)
+    {
+        for (dev = bus->devices; dev; dev = dev->next)
+        {
+            if (dev->descriptor.idVendor == SDR_VID
+                    && dev->descriptor.idProduct == SDR_PID)
+            {
+                return usb_open(dev);
+            }
+        }
+    }
+    
+	return NULL;
+}
+
+
+/*
+Monitors the LO and Tuning frequency for channels and if changed, writes new value to registry.
+
+NB! Only to be used for data what changes rapidly (sliders, frequency etc.) and can not be written therefore in real-time.
+All checkboxes, lists etc. have to be written down at the UI task immediately.
+
+*/
+UINT ExtIORegistryUpdateTask(LPVOID dummy)
+{
+static long lasttuna=-1, lasttunb=-1, lasttunc=-1, lastloa=-1, lastlob=-1, lastloc=-1;
+static long lasttransparency=-1, lastifgaina=-1, lastifgainb=-1, lastrfgaina=-1, lastrfgainb=-1;
+static long lastcoarse=-1, lastfine=-1;
+static int lasthwtype=-1;
+int i;
+
+	// Wait for fifo to be filled with data before returning to program
+	while(!globalshutdown)
+	{
+		for (i=0; i<10; i++)		//check every second for variable updates (10x100ms)
+		{
+			if (update_registry)
+			{
+				update_registry=false;			// should be in critical section really, but works without as well
+				break;
+			}
+			WaitForSingleObject(sleepevent, 100);					// do it only after every 100ms
+		}
+
+		if (lastlo_freqA != lastloa)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastLO_A"), lastlo_freqA);
+			lastloa=lastlo_freqA;
+		}
+
+		if (lastlo_freqB != lastlob)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastLO_B"), lastlo_freqB);
+			lastlob=lastlo_freqB;
+		}
+
+		if (lastlo_freqC != lastloc)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastLO_C"), lastlo_freqC);
+			lastloc=lastlo_freqC;
+		}
+
+		if (lasttune_freqA != lasttuna)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastTune_A"), lasttune_freqA);
+			lasttuna=lasttune_freqA;
+		}
+
+		if (lasttune_freqB != lasttunb)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastTune_B"), lasttune_freqB);
+			lasttunb=lasttune_freqB;
+		}
+
+		if (lasttune_freqC != lasttunc)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastTune_C"), lasttune_freqC);
+			lasttunc=lasttune_freqC;
+		}
+
+		if (Transparency != lasttransparency)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("Transparency"), Transparency);
+			lasttransparency=Transparency;
+		}
+
+		if (PhaseCoarse != lastcoarse)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("PhaseCoarse"), PhaseCoarse);
+			lastcoarse=PhaseCoarse;
+		}
+
+		if (PhaseFine != lastfine)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("PhaseFine"), PhaseFine);
+			lastfine=PhaseFine;
+		}
+
+		if (IFGainA != lastifgaina)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("IFGainA"), IFGainA);
+			lastifgaina=IFGainA;
+		}
+
+		if (IFGainB != lastifgainb)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("IFGainB"), IFGainB);
+			lastifgainb=IFGainB;
+		}
+
+		if (RFGainA != lastrfgaina)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("RFGainA"), RFGainA);
+			lastrfgaina=RFGainA;
+		}
+
+		if (RFGainB != lastrfgainb)
+		{
+			AfxGetApp()->WriteProfileInt(_T("Config"), _T("RFGainB"), RFGainB);
+			lastrfgainb=RFGainB;
+		}
+	}
+
+	return 1;
+}
 
 /*
 This entry is the first called by Winrad at startup time, and it is used both to tell to the DLL that it is 
@@ -212,126 +424,28 @@ Return value :
 	false	-	the HW did not initialize (error, or powered off, or other reasons).
 */
 
-usb_dev_handle *open_dev(void)
-{
-struct usb_bus *bus;
-struct usb_device *dev;
-
-    for (bus = usb_get_busses(); bus; bus = bus->next)
-    {
-        for (dev = bus->devices; dev; dev = dev->next)
-        {
-            if (dev->descriptor.idVendor == SDR_VID
-                    && dev->descriptor.idProduct == SDR_PID)
-            {
-                return usb_open(dev);
-            }
-        }
-    }
-    
-	return NULL;
-}
-
-
-/*
-Monitors the LO and Tuning frequency for channels and if changed, writes new value to registry
-*/
-void ExtIORegistryUpdateTask(void* dummy)
-{
-HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
-static long lasttuna=-1, lasttunb=-1, lastloa=-1, lastlob=-1;
-static long lasttransparency=-1, lastgaina=-1, lastgainb=-1, lastcoarse=-1, lastfine=-1;
-int i;
-
-	// Wait for fifo to be filled with data before returning to program
-	while(!globalshutdown)
-	{
-		for (i=0; i<10; i++)
-		{
-			if (update_registry)
-			{
-				update_registry=false;			// should be in critical section really, but works without as well
-				break;
-			}
-			WaitForSingleObject(sleepevent, 1000);					// do it only after every second
-		}
-
-		if (lastlo_freqA != lastloa)
-		{
-			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastLO_A"), lastlo_freqA);
-			lastloa=lastlo_freqA;
-		}
-
-		if (lastlo_freqB != lastlob)
-		{
-			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastLO_B"), lastlo_freqB);
-			lastlob=lastlo_freqB;
-		}
-
-		if (lasttune_freqA != lasttuna)
-		{
-			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastTune_A"), lasttune_freqA);
-			lasttuna=lasttune_freqA;
-		}
-
-		if (lasttune_freqB != lasttunb)
-		{
-			AfxGetApp()->WriteProfileInt(_T("Config"), _T("LastTune_B"), lasttune_freqB);
-			lasttunb=lasttune_freqB;
-		}
-
-		if (Transparency != lasttransparency)
-		{
-			AfxGetApp()->WriteProfileInt(_T("Config"), _T("Transparency"), Transparency);
-			lasttransparency=Transparency;
-		}
-
-		if (PhaseCoarse != lastcoarse)
-		{
-			AfxGetApp()->WriteProfileInt(_T("Config"), _T("PhaseCoarse"), PhaseCoarse);
-			lastcoarse=PhaseCoarse;
-		}
-
-		if (PhaseFine != lastfine)
-		{
-			AfxGetApp()->WriteProfileInt(_T("Config"), _T("PhaseFine"), PhaseFine);
-			lastfine=PhaseFine;
-		}
-
-		if (GainA != lastgaina)
-		{
-			AfxGetApp()->WriteProfileInt(_T("Config"), _T("GainA"), GainA);
-			lastgaina=GainA;
-		}
-
-		if (GainB != lastgainb)
-		{
-			AfxGetApp()->WriteProfileInt(_T("Config"), _T("GainB"), GainB);
-			lastgainb=GainB;
-		}
-	}
-}
-
-
 extern "C" bool __stdcall InitHW(char *name, char *model, int& type)
 {
 //static bool first = true;
 char errstring[128];
-int consoletransparency;
 unsigned long long libvernum;
 
 	DebugConsole = AfxGetApp()->GetProfileInt(_T("Config"), _T("DebugConsole"), 0);
-	Transparency = AfxGetApp()->GetProfileInt(_T("Config"), _T("Transparency"), -1);
+	Transparency = AfxGetApp()->GetProfileInt(_T("Config"), _T("Transparency"), DEFAULTTRANSPARENCY);
 
-	consoletransparency=Transparency;
+	//consoletransparency=Transparency;
 
-	if (consoletransparency == -1)
-		consoletransparency = DEFAULTTRANSPARENCY;
+	//if (consoletransparency == -1)
+	//	consoletransparency = DEFAULTTRANSPARENCY;
 
 	//--------------
 	// Create console. This is convenient for _cprintf() debugging, but as we will 
 	// set up this as a transparent window, it may also be of use for other things.
 	//--------------
+	/*
+
+	Moved to InitInstance()
+
 	if (DebugConsole)
 	{
 		if (!AllocConsole())
@@ -350,7 +464,7 @@ unsigned long long libvernum;
 
 			hWnd=GetConsoleWindow();
 			SetWindowLong(hWnd, GWL_EXSTYLE, ::GetWindowLong(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);		// add layered attribute
-			SetLayeredWindowAttributes(hWnd, 0, 255 * consoletransparency /*percent*//100, LWA_ALPHA);				// set transparency
+			SetLayeredWindowAttributes(hWnd, 0, 255 * consoletransparency / 100, LWA_ALPHA);			// set transparency in percents
 			
 			//Have to disable close button, as this will kill the application instance with no questions asked!
 			//Note, that application is still terminated when the consle is closed from taskbar.
@@ -359,29 +473,34 @@ unsigned long long libvernum;
 			_cprintf("InitHW(): Console initialized\n");
 		}
 	}
+	*/
 
 	InitializeCriticalSectionAndSpinCount(&CriticalSection, 0x00000400);
 	
 	m_pmodeless=NULL;		// reset GUI so we will be able to track the state
 
-	HWType = AfxGetApp()->GetProfileInt(_T("Config"), _T("HardwareType"), -1);
+	HWType = AfxGetApp()->GetProfileInt(_T("Config"), _T("HardwareType"), 3);
 
 	// get channel mode and tuning sync setting
 	ChannelMode=AfxGetApp()->GetProfileInt(_T("Config"), _T("ChannelMode"), CHMODE_A);
 	SyncTuning=AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncTuning"), 0);
 	SyncGain=AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncGain"), 0);
-	GainA=AfxGetApp()->GetProfileInt(_T("Config"), _T("GainA"), 7);
-	GainB=AfxGetApp()->GetProfileInt(_T("Config"), _T("GainB"), 7);
+	IFGainA=AfxGetApp()->GetProfileInt(_T("Config"), _T("IFGainA"), 7);
+	IFGainB=AfxGetApp()->GetProfileInt(_T("Config"), _T("IFGainB"), 7);
+	RFGainA=AfxGetApp()->GetProfileInt(_T("Config"), _T("RFGainA"), 7);
+	RFGainB=AfxGetApp()->GetProfileInt(_T("Config"), _T("RFGainB"), 7);
 	PhaseCoarse=AfxGetApp()->GetProfileInt(_T("Config"), _T("PhaseCoarse"), 0);
 	PhaseFine=AfxGetApp()->GetProfileInt(_T("Config"), _T("PhaseFine"), 0);	
+	AGC=AfxGetApp()->GetProfileInt(_T("Config"), _T("AGC"), 1);	
 
+	/*
 	// for diversity modes, force tune syncing!
 	if ((ChannelMode > 1)&&(ChannelMode < 5))
 	{
 		IQSampleRate = IQSAMPLERATE_DIVERSITY;
 		SyncTuning=1;
 	}
-	else if (ChannelMode <=1)
+	else if ((ChannelMode <=1)||(ChannelMode == 7))
 	{
 		IQSampleRate = IQSAMPLERATE_FULL;
 	}
@@ -389,23 +508,54 @@ unsigned long long libvernum;
 	{
 		IQSampleRate = IQSAMPLERATE_PANADAPTER;
 	}
-
-	if (HWType != 3)
-		IQSampleRate = IQSAMPLERATE_AUDIO;
-
+*/
 	// for all other modes than ExtIO DLL we are supporting only standard mode and diversity mode, which is the same as A-B
 	if ((HWType != 3) && (!(ChannelMode == CHMODE_A)||(ChannelMode == CHMODE_AMB)))
 		ChannelMode=CHMODE_A;
 
 	_cprintf("ChannelMode = %d\n", ChannelMode);
 
+	if (HWType != 3)
+	{
+		IQSampleRate = IQSAMPLERATE_AUDIO;
+	}
+	else
+	{
+		switch(ChannelMode)
+		{
+		case CHMODE_A:
+		case CHMODE_B:
+			IQSampleRate = IQSAMPLERATE_FULL;
+			break;
+
+		case CHMODE_APB:
+		case CHMODE_AMB:
+		case CHMODE_BMA:
+			IQSampleRate = IQSAMPLERATE_DIVERSITY;
+			SyncTuning=1;
+			break;
+
+		case CHMODE_ABPAN:
+		case CHMODE_BAPAN:
+			IQSampleRate = IQSAMPLERATE_PANADAPTER;
+			break;
+
+		case CHMODE_IABQ:
+		default:
+			IQSampleRate = IQSAMPLERATE_FULL;
+			break;
+		}
+	}
+
 	// There is not really a good way for fetching the LO and Tune frequency from HDSDR when noone has actually touched
 	// the frequency controls. Therefore, we are mirroring those ourselves and init the HDSDR to appropriate values ...
 
 	lastlo_freqA=AfxGetApp()->GetProfileInt(_T("Config"), _T("LastLO_A"), 0);
 	lastlo_freqB=AfxGetApp()->GetProfileInt(_T("Config"), _T("LastLO_B"), 0);
+	lastlo_freqC=AfxGetApp()->GetProfileInt(_T("Config"), _T("LastLO_C"), 0);
 	lasttune_freqA=AfxGetApp()->GetProfileInt(_T("Config"), _T("LastTune_A"), 0);
 	lasttune_freqB=AfxGetApp()->GetProfileInt(_T("Config"), _T("LastTune_B"), 0);
+	lasttune_freqC=AfxGetApp()->GetProfileInt(_T("Config"), _T("LastTune_C"), 0);
 	
 	switch(ChannelMode)
 	{
@@ -416,13 +566,18 @@ unsigned long long libvernum;
 		tune_freq=lasttune_freqB;
 		break;
 
+	case CHMODE_IABQ:
+		lo_freq=lastlo_freqC;
+		tune_freq=lasttune_freqC;
+		break;
+
 	default:
 		lo_freq=lastlo_freqA;
 		tune_freq=lasttune_freqA;
 		break;
 	}	
 
-	_beginthread(ExtIORegistryUpdateTask, 0, NULL);
+	AfxBeginThread((AFX_THREADPROC)ExtIORegistryUpdateTask, NULL);
 
 	if ((HWType == -1)||(HWType < 3) || (HWType > 7))
 		HWType = 4;			//4 ==> data returned via the sound card
@@ -576,7 +731,6 @@ char errstring[128];
 long lLastError;
 char sdrport[16];
 char freqstring[32];
-HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
 unsigned long phaseword;
 char modetmp[16];
 
@@ -629,16 +783,18 @@ char modetmp[16];
 		//libusb_ok=true;
 		fifo_loaded=false;
 
-		_beginthread(ExtIOCallbackTask, 0, NULL);
-		_beginthread(ExtIODataTask, 0, NULL);		
+		//AfxBeginThread((AFX_THREADPROC)ExtIOCallbackTask, NULL);
+		AfxBeginThread((AFX_THREADPROC)ExtIODataTask, NULL);			
 
 		// Wait for fifo to be filled with data before returning to program
+		/*
 		while(!globalshutdown)
 		{
 			WaitForSingleObject(sleepevent, 0);					// give away timeslice
 			if (fifo_loaded==true)
 				break;
 		}		
+		*/
 	}
 	else
 	{
@@ -737,9 +893,9 @@ char modetmp[16];
 
 	if (HWType != 3)
 	{
-		sprintf_s(freqstring, 32, "_ga %d\n\r", GainA);
+		sprintf_s(freqstring, 32, "_ga %d\n\r", IFGainA);
 		serial.Write(freqstring, strlen(freqstring));
-		sprintf_s(freqstring, 32, "_gb %d\n\r", GainB);
+		sprintf_s(freqstring, 32, "_gb %d\n\r", IFGainB);
 		serial.Write(freqstring, strlen(freqstring));
 
 		phaseword=1820;	//65535=2pi rad = 360deg; 65535/360*1000
@@ -753,7 +909,8 @@ char modetmp[16];
 	}
 	else
 	{
-		update_gain=true;
+		update_IFgain=true;
+		update_RFgain=true;
 		update_phaseA=true;
 		channelmode_changed=true;
 		lo_changed=true;
@@ -775,7 +932,6 @@ It has no parameters and no return value.
 
 extern "C" void __stdcall StopHW(void)
 {
-HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
 char modetmp[16];
 
 	_cprintf("StopHW() called\n");
@@ -793,7 +949,7 @@ char modetmp[16];
 
 		while (!datatask_done)
 		{
-			WaitForSingleObject(sleepevent, 0);		// give away timeslice
+			WaitForSingleObject(sleepevent, 1);		// give away timeslice
 		}
 		_cprintf("StopHW: data thread finished (threadcount=%d)\n", threadcount);
 	}
@@ -836,8 +992,26 @@ extern "C" void __stdcall CloseHW(void)
 
 	if (m_pmodeless)
 	{
-		m_pmodeless->DestroyWindow();
+		//does the following actually leak resources?
+		//we cant send close messages here, because 
+		//app is getting terminated before the message gets processed.
+
+		if (m_pmodeless)
+		{
+			m_pmodeless->DestroyWindow();
+			m_pmodeless=NULL;		//xx
+		}
+
+		if (m_pmodelessPanadapter)
+		{
+			m_pmodelessPanadapter->DestroyWindow();
+			m_pmodelessPanadapter=NULL;		//xx
+		}
+
+		//m_pmodeless->PostMessage(WM_CLOSE, 0, 0);
 	}
+/*
+	Moved to ExitInstance() code
 
 	if (hasconsole)
 	{
@@ -845,7 +1019,7 @@ extern "C" void __stdcall CloseHW(void)
 		if (!FreeConsole())
 			AfxMessageBox("Could not free the console!");
 	}
-
+*/
 	if (dev)
 	{
 		usb_release_interface(dev, 0);
@@ -889,6 +1063,10 @@ char freqstring[32];
 	case CHMODE_BAPAN:
 	case CHMODE_BMA:
 		lastlo_freqB=LOfreq;
+		break;
+
+	case CHMODE_IABQ:
+		lastlo_freqC=LOfreq;
 		break;
 
 	default:
@@ -1045,14 +1223,15 @@ extern "C" void __stdcall ShowGUI(void)
 	}
 	else
 	{
-		m_pmodeless = new CExtIODialog;
+		m_pmodeless = new CMainDialog;	//CExtIODialog;
 
 		if (m_pmodeless)
 		{
 			MainWindow=CWnd::GetActiveWindow();
 
-			m_pmodeless->Create(/*CGenericMFCDlg*/CExtIODialog::IDD, MainWindow /*GetDesktopWindow()*/);
+			m_pmodeless->Create(/*CGenericMFCDlg*//*CExtIODialog*/CMainDialog::IDD, MainWindow /*GetDesktopWindow()*/);
 			m_pmodeless->ShowWindow(SW_SHOW);
+
 		}
 		else
 		{
@@ -1074,12 +1253,13 @@ extern "C" void __stdcall HideGUI(void)
 {
 	//	......	If the DLL has a GUI, now you have to hide it
 
-	// Noone seems to call this function, but it seems that it really _should_ be called during the exit.
-	// Lets just implement GUI cleanup here for future compatibility when it starts to be called!
-
 	if (m_pmodeless)
 	{
-		m_pmodeless->DestroyWindow();
+		//does the following actually leak resources?
+		//m_pmodeless->DestroyWindow();
+		//m_pmodeless=NULL;		//xx
+
+		m_pmodeless->PostMessage(WM_CLOSE, 0, 0);
 	}
 
 	return;
@@ -1126,9 +1306,6 @@ It has no return value.
 
 extern "C" void __stdcall TuneChanged(long freq)
 {
-unsigned long increment;
-
-	
 	// store channel-specific
 	switch(ChannelMode)
 	{
@@ -1136,6 +1313,10 @@ unsigned long increment;
 	case CHMODE_BMA:
 	case CHMODE_BAPAN:
 		lasttune_freqB=freq;
+		break;
+
+	case CHMODE_IABQ:
+		lasttune_freqC=freq;
 		break;
 
 	default:
@@ -1339,7 +1520,6 @@ extern "C" void __stdcall RawDataReady(long samprate, int *Ldata, int *Rdata, in
 
 void ExtIODllCleanup(void)
 {
-HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
 int i;
 
 	globalshutdown=true;	// ask all threads to exit

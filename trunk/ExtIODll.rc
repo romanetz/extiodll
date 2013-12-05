@@ -104,57 +104,62 @@ END
 // Dialog
 //
 
-IDD_DIALOG1 DIALOGEX 0, 0, 296, 338
-STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "SDR MK1.5 'Andrus' ExtIO DLL Window"
+IDD_EXTIODIALOG DIALOGEX 0, 0, 281, 377
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    COMBOBOX        IDC_COMBO1,17,18,144,30,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "",IDC_SLIDER5,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,197,30,77,15
-    CONTROL         "ExtIO DLL I/Q Souce",IDC_CHECK1,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,23,42,82,10
-    CONTROL         "A / AB Audio",IDC_RADIO_CMODE1,"Button",BS_AUTORADIOBUTTON | WS_GROUP,67,63,56,10
-    CONTROL         "B",IDC_RADIO_CMODE2,"Button",BS_AUTORADIOBUTTON,67,74,20,10
-    CONTROL         "A+ B",IDC_RADIO_CMODE3,"Button",BS_AUTORADIOBUTTON,67,85,32,10
-    CONTROL         "A - B",IDC_RADIO_CMODE4,"Button",BS_AUTORADIOBUTTON,67,96,31,10
-    CONTROL         "B - A",IDC_RADIO_CMODE5,"Button",BS_AUTORADIOBUTTON,67,107,31,10
-    CONTROL         "A+ Panadapter",IDC_RADIO_CMODE6,"Button",BS_AUTORADIOBUTTON,67,118,65,10
-    CONTROL         "B+ Panadapter",IDC_RADIO_CMODE7,"Button",BS_AUTORADIOBUTTON,67,129,65,10
-    PUSHBUTTON      "Panadapter",IDC_BUTTON1,219,135,60,13,WS_DISABLED
-    CONTROL         "",IDC_SLIDER1,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,175,60,100,15
-    CONTROL         "",IDC_SLIDER2,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,175,79,100,15
-    CONTROL         "Sync Gain",IDC_CHECK2,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,149,101,47,10
-    CONTROL         "Sync Tuning",IDC_CHECK3,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,149,114,55,10
-    CONTROL         "",IDC_SLIDER3,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,21,157,250,15
-    CONTROL         "",IDC_SLIDER4,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,21,184,250,15
-    DEFPUSHBUTTON   "OK",IDOK,222,308,59,14
-    LTEXT           "Transparency",IDC_STATIC_TEST,201,19,45,8
-    LTEXT           "Uses LayeredWindowHelper class by Davide Calabro.",IDC_STATIC,18,278,171,8
-    LTEXT           "See LayeredWindowHelperST.h for license details.",IDC_STATIC,18,289,162,8
-    LTEXT           "SDR MK1.5 'Andrus' ExtIO DLL by Andrus Aaslaid (ES1UVB)",IDC_STATIC,75,254,189,8
-    LTEXT           "http://uvb-76.net",IDC_STATIC,75,263,58,8
-    CONTROL         5003,IDC_STATIC,"Static",SS_BITMAP,19,206,44,61
-    LTEXT           "COM Port",IDC_STATIC,17,7,32,8
-    LTEXT           "Gain A",IDC_STATIC,149,65,22,8
-    LTEXT           "Gain B",IDC_STATIC,149,82,21,8
-    LTEXT           "COM Ports enumeration class by Jochen Arndt.",IDC_STATIC,18,305,152,8
-    LTEXT           "Licensed as The Code Project Open License (CPOL)",IDC_STATIC,18,315,164,8
-    LTEXT           "Phase A Coarse",IDC_STATIC,25,150,52,8
-    LTEXT           "Phase A Fine",IDC_STATIC,25,177,42,8
-    EDITTEXT        IDC_EDIT1,225,201,40,14,ES_AUTOHSCROLL | WS_DISABLED | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT           "Ch A Phase:",IDC_STATIC,183,201,43,8
-    EDITTEXT        IDC_EDIT2,107,42,54,14,ES_RIGHT | ES_AUTOHSCROLL | WS_DISABLED | NOT WS_BORDER | NOT WS_TABSTOP
-    LTEXT           "Radio FW Ver.",IDC_STATIC_FWVER,75,214,188,8
-    LTEXT           "ExtIO DLL Ver.",IDC_STATIC_EXTIOVER,75,223,60,8
-    GROUPBOX        "Channel",IDC_STATIC,22,57,109,85
-    LTEXT           "0",IDC_STATIC,18,159,8,8
-    RTEXT           "0.0",IDC_STATIC,7,185,13,8
-    LTEXT           "359",IDC_STATIC,272,158,17,8
-    LTEXT           "1.0",IDC_STATIC,271,185,18,8
-    CONTROL         "Show Debug Console",IDC_CHECK4,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,200,272,89,10
-    LTEXT           "LibUSB DLL Version Driver Version",IDC_STATIC_LIBUSBVER,75,232,193,8
+    COMBOBOX        IDC_COMBO1,10,19,144,30,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "",IDC_SLIDER5,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,186,26,77,15
+    CONTROL         "ExtIO DLL I/Q Souce",IDC_CHECK1,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,16,43,82,10
+    CONTROL         "A / AB Audio",IDC_RADIO_CMODE1,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,21,69,56,10
+    CONTROL         "B",IDC_RADIO_CMODE2,"Button",BS_AUTORADIOBUTTON,21,80,20,10
+    CONTROL         "A+ B",IDC_RADIO_CMODE3,"Button",BS_AUTORADIOBUTTON,21,91,32,10
+    CONTROL         "A - B",IDC_RADIO_CMODE4,"Button",BS_AUTORADIOBUTTON,21,103,31,10
+    CONTROL         "B - A",IDC_RADIO_CMODE5,"Button",BS_AUTORADIOBUTTON,21,114,31,10
+    CONTROL         "A+ Panadapter",IDC_RADIO_CMODE6,"Button",BS_AUTORADIOBUTTON,21,125,65,10
+    CONTROL         "B+ Panadapter",IDC_RADIO_CMODE7,"Button",BS_AUTORADIOBUTTON,21,136,65,10
+    CONTROL         "UHF (TX8M ChA=I ChB=Q)",IDC_RADIO_CMODE8,"Button",BS_AUTORADIOBUTTON,21,147,103,10
+    PUSHBUTTON      "Panadapter",IDC_BUTTON1,212,237,60,13,WS_DISABLED
+    CONTROL         "",IDC_SLIDER1,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,164,56,100,15
+    CONTROL         "",IDC_SLIDER2,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,164,75,100,15
+    CONTROL         "Sync A/B Gain",IDC_CHECK2,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,185,97,61,10
+    CONTROL         "Sync A/B Tuning",IDC_CHECK3,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,185,110,68,10
+    CONTROL         "",IDC_SLIDER3,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,14,177,250,15
+    CONTROL         "",IDC_SLIDER4,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,14,204,250,15
+    DEFPUSHBUTTON   "OK",IDOK,213,354,59,14
+    LTEXT           "Transparency",IDC_STATIC_TEST,192,15,45,8
+    LTEXT           "Uses LayeredWindowHelper class by Davide Calabro.",IDC_STATIC,11,305,171,8
+    LTEXT           "See LayeredWindowHelperST.h for license details.",IDC_STATIC,11,316,162,8
+    LTEXT           "SDR MK1.5 'Andrus' ExtIO DLL by Andrus Aaslaid (ES1UVB)",IDC_STATIC,68,276,189,8
+    LTEXT           "http://uvb-76.net",IDC_STATIC,68,285,58,8
+    CONTROL         5003,IDC_STATIC,"Static",SS_BITMAP,12,226,44,61
+    LTEXT           "COM Port",IDC_STATIC,10,8,32,8
+    LTEXT           "IF Gain A",IDC_STATIC,135,58,30,8
+    LTEXT           "IF Gain B",IDC_STATIC,135,76,30,8
+    LTEXT           "COM Ports enumeration class by Jochen Arndt.",IDC_STATIC,11,332,152,8
+    LTEXT           "Licensed as The Code Project Open License (CPOL)",IDC_STATIC,11,342,164,8
+    LTEXT           "Phase A Coarse",IDC_STATIC,18,170,52,8
+    LTEXT           "Phase A Fine",IDC_STATIC,18,197,42,8
+    EDITTEXT        IDC_EDIT1,218,221,40,14,ES_AUTOHSCROLL | WS_DISABLED | NOT WS_BORDER | NOT WS_TABSTOP
+    LTEXT           "Ch A Phase:",IDC_STATIC,176,221,43,8
+    EDITTEXT        IDC_EDIT2,100,43,54,14,ES_RIGHT | ES_AUTOHSCROLL | WS_DISABLED | NOT WS_BORDER | NOT WS_TABSTOP
+    LTEXT           "Radio FW Ver.",IDC_STATIC_FWVER,67,253,214,8
+    LTEXT           "ExtIO DLL Ver.",IDC_STATIC_EXTIOVER,68,244,107,8
+    GROUPBOX        "Channel",IDC_STATIC,15,58,109,102
+    LTEXT           "0",IDC_STATIC,11,179,8,8
+    RTEXT           "0.0",IDC_STATIC,0,204,13,8
+    LTEXT           "359",IDC_STATIC,264,178,17,8
+    LTEXT           "1.0",IDC_STATIC,263,205,18,8
+    CONTROL         "Show Debug Console",IDC_CHECK4,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,192,294,89,10
+    LTEXT           "LibUSB DLL Version Driver Version",IDC_STATIC_LIBUSBVER,67,263,214,8
+    CONTROL         "AGC ON",IDC_CHECK5,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,185,123,42,10
+    CONTROL         "",IDC_SLIDER6,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,164,139,100,15
+    CONTROL         "",IDC_SLIDER7,"msctls_trackbar32",TBS_AUTOTICKS | WS_TABSTOP,164,157,100,15
+    LTEXT           "RF Gain A",IDC_STATIC,132,141,32,8
+    LTEXT           "RF Gain B",IDC_STATIC,132,159,32,8
 END
 
-IDD_DIALOG2 DIALOGEX 0, 0, 913, 237
+IDD_PANADAPTERDIALOG DIALOGEX 0, 0, 913, 237
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_STATICEDGE
 CAPTION "Panadapter"
@@ -182,6 +187,21 @@ BEGIN
     LTEXT           "RangeSlider Class by Jens Scheidtmann (Creative Commons BY-SA 3.0 License)",IDC_STATIC,606,220,290,9
 END
 
+IDD_MAINDIALOG DIALOGEX 0, 0, 292, 402
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "SDR MK1.5 'Andrus' ExtIO DLL Window"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    CONTROL         "",IDC_TAB1,"SysTabControl32",0x0,7,2,278,13
+END
+
+IDD_ADVANCEDDIALOG DIALOGEX 0, 0, 282, 387
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_SYSMENU
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "Advanced  Settings are not yet Implemented",IDC_STATIC,63,130,144,8
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -191,20 +211,26 @@ END
 #ifdef APSTUDIO_INVOKED
 GUIDELINES DESIGNINFO 
 BEGIN
-    IDD_DIALOG1, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 289
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 331
-    END
-
-    IDD_DIALOG2, DIALOG
+    IDD_PANADAPTERDIALOG, DIALOG
     BEGIN
         LEFTMARGIN, 7
         RIGHTMARGIN, 906
         TOPMARGIN, 7
         BOTTOMMARGIN, 229
+    END
+
+    IDD_MAINDIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 285
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 395
+    END
+
+    IDD_ADVANCEDDIALOG, DIALOG
+    BEGIN
+        VERTGUIDE, 281
+        BOTTOMMARGIN, 377
     END
 END
 #endif    // APSTUDIO_INVOKED
@@ -217,6 +243,25 @@ END
 
 IDB_BITMAP1             BITMAP                  "extio_small.bmp"
 #endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Estonian resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ETI)
+#ifdef _WIN32
+LANGUAGE LANG_ESTONIAN, SUBLANG_DEFAULT
+#pragma code_page(1257)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// HTML
+//
+
+IDR_HTML_ADVANCEDDIALOG HTML                    "AdvancedDialog.htm"
+#endif    // Estonian resources
 /////////////////////////////////////////////////////////////////////////////
 
 

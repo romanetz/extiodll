@@ -25,15 +25,15 @@ protected:
 	//{{AFX_MSG(CGenericMFCDlg)
 	virtual BOOL OnInitDialog();
 	virtual void PostNcDestroy();
-	afx_msg void OnClose();
+	//afx_msg void OnClose();
 	afx_msg BOOL OnDeviceChange(UINT nEventType, DWORD_PTR dwData);
 	//}}AFX_MSG
 
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
 
 	CComPortCombo m_comboPorts;
-	CGainSliderCHA m_GainSliderA;
-	CGainSliderCHB m_GainSliderB;
+	CGainSliderCHA m_IFGainSliderA;
+	CGainSliderCHB m_IFGainSliderB;
 	CPhaseSliderCoarse m_PhaseSliderCoarse;
 	CPhaseSliderFine m_PhaseSliderFine;
 	CCheckBoxDiversity m_DiversityCheck;
@@ -44,6 +44,9 @@ protected:
 	CCheckBoxDllIQ m_DllIQ;	
 	CDataRateInfo m_DataRateInfo;
 	CCheckBoxDebugConsole m_DebugConsoleCheck;
+	CCheckBoxAGC m_AGCCheck;
+	CRFGainASlider m_RFGainSliderA;
+	CRFGainBSlider m_RFGainSliderB;
 	CButton1 m_Button1;
 	
 	DECLARE_MESSAGE_MAP()
@@ -51,6 +54,8 @@ protected:
 public:
 	int m_nChannelMode;
 	afx_msg void OnBnClickedOk();
+
+	void EnableDisableControls(void);
 
 private:
 	CLayeredWindowHelperST	m_Layered;
@@ -70,5 +75,7 @@ public:
 	afx_msg void OnBnClickedRadioCmode5();
 	afx_msg void OnBnClickedRadioCmode6();
 	afx_msg void OnBnClickedRadioCmode7();
+	afx_msg void OnBnClickedRadioCmode8();
 	afx_msg void OnBnClickedButton1();
+	afx_msg void OnBnClickedCheck5();
 };

@@ -1,6 +1,11 @@
 
 #include "stdafx.h"
 #include "ExtIODll.h"
+#include "ExtIOFunctions.h"
+
+#include <conio.h>				// gives _cprintf()
+
+bool hasconsole=false;
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -51,7 +56,100 @@ END_MESSAGE_MAP()
 CExtIODllApp::CExtIODllApp()
 {
 	// TODO: add construction code here,
-	// Place all significant initialization in InitInstance
+	// Place all significant initialization in InitInstance	 
+}
+
+HANDLE sleepevent;
+
+BOOL CExtIODllApp::InitInstance()
+{
+int debugcon, transp;
+
+	CWinApp::InitInstance();	
+
+	SetRegistryKey("Satrian");
+
+	//not nice to fetch these parameters here from the registry, but we eant this to be done before anything else starts, so there is no way really.
+	//All other registry loading is at the InitHW()
+	
+	debugcon = AfxGetApp()->GetProfileInt(_T("Config"), _T("DebugConsole"), 0);
+	transp = AfxGetApp()->GetProfileInt(_T("Config"), _T("Transparency"), 90);		//default transparency is 90%
+
+	//--------------
+	// Create console. This is convenient for _cprintf() debugging, but as we will 
+	// set up this as a transparent window, it may also be of use for other things.
+	//--------------
+	if (debugcon)
+	{
+		if (!AllocConsole())
+		{
+			hasconsole=false;
+			AfxMessageBox("Failed to create the console!", MB_ICONEXCLAMATION);
+		}
+		else
+		{
+		HWND hWnd;
+
+			hasconsole=true;
+			HANDLE nConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+			SetConsoleTextAttribute(nConsole, 0x0002|0x0008);	//green|white to get the bright color
+			SetConsoleTitle("ExtIO DLL Console");
+
+			hWnd=GetConsoleWindow();
+			SetWindowLong(hWnd, GWL_EXSTYLE, ::GetWindowLong(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);		// add layered attribute
+			SetLayeredWindowAttributes(hWnd, 0, 255 * transp /*percent*//100, LWA_ALPHA);				// set transparency
+			
+			//Have to disable close button, as this will kill the application instance with no questions asked!
+			//Note, that application is still terminated when the consle is closed from taskbar.
+			DeleteMenu(GetSystemMenu(hWnd, false), SC_CLOSE, MF_BYCOMMAND);
+
+			_cprintf("InitInstance(): Console initialized\n");
+		}
+	}
+/*
+	{
+	DWORD dwError, dwThreadPri;
+
+		dwThreadPri = GetThreadPriority();
+		_cprintf("Current thread priority is %d\n", dwThreadPri);
+
+		if(!SetThreadPriority(THREAD_MODE_BACKGROUND_BEGIN))
+		{
+			dwError = GetLastError();
+			if( ERROR_THREAD_MODE_ALREADY_BACKGROUND == dwError)
+				_cprintf("Already in background mode\n");
+			else 
+				_cprintf("Failed to enter background mode (%d)\n", dwError);
+		} 
+	}
+
+	dwThreadPri = GetThreadPriority();
+	_cprintf("Thread priority is set to %d\n", dwThreadPri);
+*/
+	sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
+
+	_cprintf("Initializing memwatch ..\n");
+	mwInit();
+
+	return TRUE;
+}
+
+int CExtIODllApp::ExitInstance() 
+{
+	mwTerm();
+
+	//	deallocate console
+	if (hasconsole)
+	{
+		AfxMessageBox("All done. Check the console now or press OK to continue closing application", MB_ICONINFORMATION); 
+
+		if (!FreeConsole())
+			AfxMessageBox("Could not free the console!");
+
+		hasconsole=false;		//just in case update flag
+	}
+
+	return CWinApp::ExitInstance();
 }
 
 /////////////////////////////////////////////////////////////////////////////

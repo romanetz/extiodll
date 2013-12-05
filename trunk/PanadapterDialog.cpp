@@ -8,23 +8,14 @@
 
 #include <math.h>
 #include <process.h>
+#include <conio.h>
 #include "Fourier.h"
-
-//#include "ExtIODll.h"
-//#include "ExtIODialog.h"
-//#include "SelectComPort\ComPortCombo.h"
-//#include "serial\serial.h"
-//#include "libusb\lusb0_usb.h"
-//#include "ExtIOFunctions.h"
-
-//#include <Dbt.h>				// Equates for WM_DEVICECHANGE and BroadcastSystemMessage
-//#include <conio.h>				// gives _cprintf()
 
 // CPanadapterDialog dialog
 
 extern int Transparency;
 extern unsigned int pandata_wptr;
-extern unsigned char* PANData;
+extern unsigned char PANData[];
 
 extern unsigned long iflimit_high;	//ExtIOFunctions.cpp
 extern unsigned long iflimit_low;
@@ -34,6 +25,11 @@ extern volatile bool update_lo;
 extern volatile bool do_callback105;
 extern volatile bool do_callback101;
 volatile bool do_pantableupdate=false;
+
+extern bool pancaching;
+extern HANDLE sleepevent;
+
+int scrolltimer=50;		//NB! this value is an actual timer value, NOT the slider value (we have slider reversed!)
 
 PANENTRY panentry;
 int fftbands=0;
@@ -46,6 +42,9 @@ int skipzone_new=8;
 
 long long _lastrangemin=32000000;		// cause immdiate update on pass 1
 long long _lastrangemax=0;
+
+long long bytesprocessed=0;
+long long lastmagicfound=0;
 
 double dbrangemin=0, dbrangemax=1100;
 
@@ -80,22 +79,6 @@ void CPanadapterDialog::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT2, m_ActiveInfo);
 	DDX_Control(pDX, IDC_CUSTOM1, c_FreqRangeSlider);
 	DDX_Control(pDX, IDC_CUSTOM2, c_ColorRangeSlider);
-
-	/*
-	DDX_Control(pDX, IDC_COMBO1, m_comboPorts);
-	DDX_Control(pDX, IDC_SLIDER1, m_GainSliderA);
-	DDX_Control(pDX, IDC_SLIDER2, m_GainSliderB);
-	DDX_Control(pDX, IDC_SLIDER3, m_PhaseSliderCoarse);
-	DDX_Control(pDX, IDC_SLIDER4, m_PhaseSliderFine);
-	DDX_Control(pDX, IDC_EDIT1, m_PhaseInfo);
-	DDX_Control(pDX, IDC_SLIDER5, m_TransparencySlider);
-	DDX_Control(pDX, IDC_CHECK1, m_DllIQ);
-	DDX_Control(pDX, IDC_EDIT2, m_DataRateInfo);
-	DDX_Radio(pDX, IDC_RADIO_CMODE1, m_nChannelMode);
-	DDX_Control(pDX, IDC_CHECK2, m_SyncGainCheck);
-	DDX_Control(pDX, IDC_CHECK3, m_SyncTuneCheck);
-	DDX_Control(pDX, IDC_CHECK4, m_DebugConsoleCheck);
-	*/
 }
 
 
@@ -108,28 +91,9 @@ BEGIN_MESSAGE_MAP(CPanadapterDialog, CDialog)
 	ON_WM_ERASEBKGND()
 	ON_REGISTERED_MESSAGE(RANGE_CHANGED, OnRangeChange)
 	ON_WM_CLOSE()
-/*
-	ON_BN_CLICKED(IDOK, &CExtIODialog::OnBnClickedOk)
-	ON_BN_CLICKED(IDC_BUTTON1, &CExtIODialog::OnBnClickedButton1)
-	ON_WM_DEVICECHANGE()
-	ON_CBN_SELCHANGE(IDC_COMBO1, &CExtIODialog::OnCbnSelchangeCombo1)
-	ON_BN_CLICKED(IDC_CHECK1, &CExtIODialog::OnBnClickedCheck1)
-	ON_BN_CLICKED(IDC_CHECK2, &CExtIODialog::OnBnClickedCheck2)
-	ON_BN_CLICKED(IDC_CHECK3, &CExtIODialog::OnBnClickedCheck3)
-	ON_BN_CLICKED(IDC_CHECK4, &CExtIODialog::OnBnClickedCheck4)
-	ON_WM_HSCROLL()
-	ON_WM_TIMER()			// we need timer to do periodic updates on dialog window. Doing it by accessing contols from different task directly corrupts something
-	ON_BN_CLICKED(IDC_RADIO_CMODE1, &CExtIODialog::OnBnClickedRadioCmode1)
-	ON_BN_CLICKED(IDC_RADIO_CMODE2, &CExtIODialog::OnBnClickedRadioCmode2)
-	ON_BN_CLICKED(IDC_RADIO_CMODE3, &CExtIODialog::OnBnClickedRadioCmode3)
-	ON_BN_CLICKED(IDC_RADIO_CMODE4, &CExtIODialog::OnBnClickedRadioCmode4)
-	ON_BN_CLICKED(IDC_RADIO_CMODE5, &CExtIODialog::OnBnClickedRadioCmode5)
-	ON_BN_CLICKED(IDC_RADIO_CMODE5, &CExtIODialog::OnBnClickedRadioCmode6)
-	ON_BN_CLICKED(IDC_RADIO_CMODE5, &CExtIODialog::OnBnClickedRadioCmode7)
-*/
 END_MESSAGE_MAP()
 
-void PanadapterTask(void* dummy);
+UINT PanadapterTask(LPVOID dummy);
 
 CDC *MemDC, *pDC;
 CRect rcWaterFall;	
@@ -193,6 +157,13 @@ int i, j;
     // Set "Visual" range.
 	c_ColorRangeSlider.SetVisualMinMax(0, 0);
 
+	m_SpeedSlider.SetRange(1, 120);
+	//reversing the slider control is real pain, so we are interpreting the value bacwkards.
+	//Note, that we are writing the actual timer value to registry, not the slider value!
+	m_SpeedSlider.SetPos(m_SpeedSlider.GetRangeMax()+m_SpeedSlider.GetRangeMin()-scrolltimer);
+
+	m_SpeedSlider.SetTicFreq(10);
+	
 	// build waterfall bitblt structures now
 
 	GetDlgItem(IDC_WATERFALL)->GetClientRect(rcWaterFall);
@@ -229,9 +200,9 @@ int i, j;
 	run_panadaptertask=true;
 	panadaptertask_exited=false;
 
-	_beginthread(PanadapterTask, 0, NULL);
+	AfxBeginThread((AFX_THREADPROC)PanadapterTask, NULL/*, THREAD_PRIORITY_IDLE*/);
 	// set timer only after DC stuff is initialized
-	SetTimer(ID_CLOCK_TIMER, 50, NULL);		//50ms timer, null show put it to task queue
+	SetTimer(ID_CLOCK_TIMER, scrolltimer, NULL);		//50ms timer, null show put it to task queue
 
 	return true;
 }
@@ -250,49 +221,6 @@ float shift=10.0f;			// just brighten the overall picture by x dB
 
 double multiplier;
 
-	/*
-	for (i=0; i<_fftbands; i++)
-	{
-		fftpool[i]-=(dbrangemin/10);			// crop from below;
-		if (fftpool[i] < 0)
-			fftpool[i]=0;
-	}
-	*/
-
-	/*
-	for (i=0; i<_fftbands; i++)
-	{
-		// expander
-		fftpool[i]*=(fftpool[i]/knee)+(100-(100*knee));
-		//fftpool[i]*=fftpool[i];		//make a little more "logarithmic" to filter noise
-		fftpool[i]/=expander;			//100=no expansion; below 100 will cause expansion
-		fftpool[i]+=shift;
-
-		if (fftpool[i] > 110.0f)
-			fftpool[i]=110.0f;			// set limiter to 100dB
-
-	}
-	*/
-
-	/*
-	// now create expander
-
-	multiplier=(110-(dbrangemin/10))/(dbrangemax/10);
-
-	for (i=0; i<_fftbands; i++)
-	{
-		fftpool[i]-=(dbrangemin/10);			// crop from below;
-		if (fftpool[i] < 0)
-			fftpool[i]=0;
-
-		//now multiply, so dbrangemax == 110, clip the rest to 110
-
-		fftpool[i]*=multiplier;
-		if (fftpool[i]>110)
-			fftpool[i]=110;
-	}
-	*/
-	
 	multiplier=110/((dbrangemax-dbrangemin)/10);
 
 	for (i=0; i<_fftbands; i++)
@@ -314,20 +242,17 @@ unsigned int pandata_rptr=0;
 int magicsfound=0;
 unsigned char magic[12]={0xA0+0, 0x55, 0xF0+1, 0xF0, 0xA0+2, 0x55, 0xF0+3, 0xF0, 0xA0+4, 0x55, 0xF0+5, 0xF0};
 int panstate=PAN_MAGIC;
-
 int minfreq, maxfreq;
 long long _freqrangemin=0, _freqrangemax=32000000, _freqspan=32000000;
-
 float dbminmaxpool[0xFFF+1];
 
-void PanadapterTask(void* dummy)
+
+UINT PanadapterTask(LPVOID dummy)
 {
 int i=0, j=0, k;
 unsigned int l_pandata_wptr;
-//char prntxt[64];
 char freqbuff[8];		// four last bytes are used for checking the trailer magic (supposed to be AA 55 F0 F0)
-HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
-HANDLE hArray[2];
+
 //HANDLE hSnapShot;
 
 unsigned int pandatalen=0;
@@ -345,12 +270,14 @@ double dummydbl;
 double* window;
 unsigned int iterations=0;
 
+double avgval=0;
+int avgcnt=0;
+
+bool magicgone=false;
+
 float re, im;
 
 unsigned int dbpooloffset=0;
-
-	hArray[0] = sleepevent;
-	//hArray[1] = hParent;
 
 	//hSnapShot = lpfCreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0 );
 
@@ -379,8 +306,13 @@ unsigned int dbpooloffset=0;
 
 	while(run_panadaptertask)
 	{
-		//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
-		WaitForSingleObject(sleepevent, 1);
+		WaitForSingleObject(sleepevent, 1);		//give away timeslice
+
+		if ((bytesprocessed-lastmagicfound)>1024)
+		{
+			magicgone=true;
+			_cprintf("Magic loss!\n");
+		}
 
 		if (fftbands_new > fftbands)
 		{
@@ -456,38 +388,31 @@ unsigned int dbpooloffset=0;
 		l_pandata_wptr=pandata_wptr;		
 
 		while (((pandata_rptr&PANDATAMASK)!=(l_pandata_wptr&PANDATAMASK))&&(run_panadaptertask))
-		{
-			//WaitForSingleObject(sleepevent, 0);					// give away timeslice
-			//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
-
-			iterations++;
-			if (!(iterations%10000))
-				WaitForSingleObject(sleepevent, 1);					// give away timeslice
-			else
-				WaitForSingleObject(sleepevent, 0);					// give away timeslice
-
+		{			
 			switch(panstate)
 			{
 			case PAN_MAGIC:
 			case PAN_DATA:
 				while (((pandata_rptr&PANDATAMASK)!=(l_pandata_wptr&PANDATAMASK))&&(run_panadaptertask))
-				{
-					iterations++;
-					if (!(iterations%1000))
-						WaitForSingleObject(sleepevent, 1);					// give away timeslice
-					else
-						WaitForSingleObject(sleepevent, 0);					// give away timeslice
-
-					//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
-					
+				{			
 					for (; i<8; i++)
 					{
+						bytesprocessed++;
+
 						if (PANData[(pandata_rptr+i)&PANDATAMASK] == magic[i])
 						{
 							if (((pandata_rptr+i)&PANDATAMASK)==(l_pandata_wptr&PANDATAMASK))
 								break;		// buffer end, so break, but do not reset scan pointer
 							else
+							{
+								if (magicgone)
+								{
+									_cprintf("Magic reappeared after %ld\n", (bytesprocessed-lastmagicfound));
+									magicgone=false;
+								}
+								lastmagicfound=bytesprocessed;		//internal debug only
 								continue;	// magic matches and there is still data, so continue scan
+							}
 						}
 						else
 						{
@@ -498,17 +423,16 @@ unsigned int dbpooloffset=0;
 
 					if (i==8)				// all magic done?
 					{											
-						if ((panstate == PAN_DATA)&&(pandatalen >=((fftbands*4)+(skipzone*4))))	// we need to have at least enough samples for FFT (16-bit I, 16-bit Q and 8-IQsample ignore zone what is captured while frequency was changed)
+						if ((panstate == PAN_DATA)&&(pandatalen >=(unsigned int)((fftbands*4)+(skipzone*4))))	// we need to have at least enough samples for FFT (16-bit I, 16-bit Q and 8-IQsample ignore zone what is captured while frequency was changed)
 						{
 							//new magic found, so we have to process the current pandata buffer and inject new FFT!
 							//note, that (int)(*(int*)&freqbuff[0]) contains current starting frequency!
 							
 							// copy last IQ pairs to FFT source buffer
 							for (i=0, j=skipzone*4; i<fftbands; i++)
-							{
-								WaitForSingleObject(sleepevent, 0);					// give away timeslice
-								//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
-								
+							{								
+								bytesprocessed++;
+
 								// have to be copied with sign!
 								pandataI[i]=(short)(short*)*(pandata+j);
 								j+=2;
@@ -556,9 +480,6 @@ unsigned int dbpooloffset=0;
 
 							for(i=0; i<fftbands; i++)
 							{
-								WaitForSingleObject(sleepevent, 0);					// give away timeslice
-								//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
-
 								re = (float)fftpoolQ[i];
 								im = (float)fftpoolI[i];
 								
@@ -606,33 +527,20 @@ unsigned int dbpooloffset=0;
 							// FFT points to plot. the fdraw[] structure is likely having more points than we need, 
 							// so what we do is, that we will cut off the 64kHz chunk of FFT data and then generate 
 							// the required number of points from there.
-								
-							/*
-							for (i=0; i<fftbandsneeded; i++)	//plot the whole range
-							{									
-								if ((freqpos+i)<=(rcWaterFall.right-1))
-									MemDC.SetPixelV(freqpos+i, rcWaterFall.bottom-1, Intensity(fdraw[fftmap[i]]));
-							}
-							*/
 
+							for (i=0, j=0, avgval=0, avgcnt=0; ((i<fftbands)&&(j<fftbandsneeded)); i++)
 							{
-							double avgval=0;
-							int avgcnt=0;
+								avgval+=fdraw[i];
+								avgcnt++;
 
-								for (i=0, j=0; ((i<fftbands)&&(j<fftbandsneeded)); i++)
+								if (i==fftmap[j])
 								{
-									avgval+=fdraw[i];
-									avgcnt++;
-
-									if (i==fftmap[j])
-									{
-										avgval/=avgcnt;
-										if ((freqpos+j)<=(rcWaterFall.right-1))
-											MemDC->SetPixelV(freqpos+j, rcWaterFall.bottom-1, Intensity(avgval));
-										j++;
-										avgval=0;
-										avgcnt=0;
-									}
+									avgval/=avgcnt;
+									if ((freqpos+j)<=(rcWaterFall.right-1))
+										MemDC->SetPixelV(freqpos+j, rcWaterFall.bottom-1, Intensity(avgval));
+									j++;
+									avgval=0;
+									avgcnt=0;
 								}
 							}
 							
@@ -664,9 +572,8 @@ unsigned int dbpooloffset=0;
 						{
 							//copy panadapter data to the buffer
 							if (pandatalen < (PANDATAMASK+1))
-							{
-								//WaitForSingleObject(sleepevent, 0);					// give away timeslice
-								//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
+							{		
+#pragma message(" ------- Why do we double-buffer here?")
 								pandata[pandatalen]=PANData[pandata_rptr&PANDATAMASK];
 								pandatalen++;
 							}
@@ -678,26 +585,25 @@ unsigned int dbpooloffset=0;
 
 			case PAN_FREQ:
 				while ((pandata_rptr&PANDATAMASK)!=(l_pandata_wptr&PANDATAMASK))
-				{					
-					WaitForSingleObject(sleepevent, 0);					// give away timeslice					
-					//MsgWaitForMultipleObjects(1, hArray, FALSE, 0, QS_ALLINPUT);					// give away timeslice
-
+				{										
 					freqbuff[i]=PANData[pandata_rptr&PANDATAMASK];
 					i++;
 					pandata_rptr++;
 
+					bytesprocessed++;
+
 					if (i==8)
 					{
+						i=0;
+
 						if (!memcmp(freqbuff+4, magic+8, 4))
 						{
-							i=0;
 							panstate=PAN_DATA;
 							magicsfound++;		// increment successful tokens count
 						}
 						else
 						{
 							// trailer failure, so discard current header and start over
-							i=0;
 							panstate=PAN_MAGIC;
 						}
 
@@ -724,6 +630,8 @@ unsigned int dbpooloffset=0;
 	free(fftmap16);
 
 	panadaptertask_exited=true;
+
+	return 1;
 }
 
 long lastclickX=0;
@@ -746,6 +654,8 @@ unsigned int steps, fftpoints, fftpointsP2, skip;
 
 	if (nIDEvent == ID_CLOCK_TIMER)
 	{
+		KillTimer(ID_CLOCK_TIMER);		//50ms should be enough, but just to be sure to avoid recursion
+		
 		CBitmap *pxOldBitmap = (CBitmap*) MemDC->SelectObject(MemBitmap);
 		pDC->BitBlt(0,0,rcWaterFall.right,rcWaterFall.bottom,MemDC,0,0,SRCCOPY);	// Copies the bitmap from the memory dc to the pdc using a fast bitblt function call.
 		//bitblt internally by one line and add a new scanline at the bottom
@@ -768,7 +678,7 @@ unsigned int steps, fftpoints, fftpointsP2, skip;
 		if (!_freqspan)
 			_freqspan=1;		// avoid divide by 0
 
-		sprintf_s(prntxt, 256, "%.3f-%.3f MHz (%d-%d) [%d+%d*%d %dsps]", freqrangemin/1000000, freqrangemax/1000000, minfreq, maxfreq, panentry.startfreq, panentry.steps, panentry.stepfreq, panentry.samples);
+		sprintf_s(prntxt, 256, "%.3f-%.3f MHz (%d-%d) [%d+%d*%d %dsps] [%d]", freqrangemin/1000000, freqrangemax/1000000, minfreq, maxfreq, panentry.startfreq, panentry.steps, panentry.stepfreq, panentry.samples, _selectedfreq);
 		m_RangeInfo.SetWindowText(prntxt);
 
 		GetDlgItem(IDC_WATERFALL)->GetWindowRect(&rect);
@@ -811,7 +721,7 @@ unsigned int steps, fftpoints, fftpointsP2, skip;
 			//make fftpoints power of two now
 			for (i=0, fftpointsP2=2; i<16; i++)
 			{
-				if ((1<<i)>=fftpoints)
+				if ((unsigned int)(1<<i)>=fftpoints)
 				{
 					fftpointsP2=1<<(i+1);		//multiple by two on the fly, as for output complex FFT both sides (-N and +N) we need double the points
 					break;
@@ -879,7 +789,7 @@ unsigned int steps, fftpoints, fftpointsP2, skip;
 			_selectedfreq=lo_freq;
 		}
 
-		sprintf_s(prntxt, 256, "%d (%d) [%d]", magicsfound, magicsfound-localmagic, _selectedfreq);
+		sprintf_s(prntxt, 256, "%d (%d) [%d]", magicsfound, magicsfound-localmagic, bytesprocessed);
 		m_ActiveInfo.SetWindowText(prntxt);
 
 		lastclickX=0;
@@ -894,6 +804,8 @@ unsigned int steps, fftpoints, fftpointsP2, skip;
 		freqrangemax+=(iflimit_high-iflimit_low)/2;
 		
 		c_FreqRangeSlider.SetVisualMinMax(freqrangemin, freqrangemax);
+
+		SetTimer(ID_CLOCK_TIMER, scrolltimer, NULL);		//restore our 50ms timer
 	}
 
 	CDialog::OnTimer(nIDEvent); 
@@ -927,8 +839,15 @@ CSliderCtrl* pSld;
 
 	pSld = (CSliderCtrl*)pScrollBar;
 
+	// It seems, that having a reversed slider is a real pain, so we have to interpret 
+	// the result backwards ourselves. Note, that we also write backwards value to the registry
+	// for easing up initialization.
+
 	if (*pSld == m_SpeedSlider)
 	{
+		//could this generate race condition when the OnTimer() is tryng to re-enable timer?
+		scrolltimer=m_SpeedSlider.GetPos();
+		scrolltimer=m_SpeedSlider.GetRangeMax()+m_SpeedSlider.GetRangeMin()-scrolltimer;
 	}
 
 	CDialog::OnHScroll(nSBCode, nPos, pScrollBar);
@@ -949,8 +868,11 @@ LRESULT CPanadapterDialog::OnRangeChange(WPARAM wParam, LPARAM /* lParam */)
 extern CPanadapterDialog* m_pmodelessPanadapter;
 
 void CPanadapterDialog::PostNcDestroy()
-{
+{	
+	AfxMessageBox("PostNcDestroy()");
+
 	CDialog::PostNcDestroy();	
+
 	m_pmodelessPanadapter = NULL;		
 	delete this;
 }
@@ -958,7 +880,7 @@ void CPanadapterDialog::PostNcDestroy()
 // We have to handle close event, as we do not have parent object what would perform destruction for us
 void CPanadapterDialog::OnClose()
 {
-HANDLE sleepevent = CreateEvent(NULL, FALSE, FALSE, NULL);		// we are using that instead of sleep(), as it is more kind to overall system resources
+	AfxMessageBox("OnClose()");
 
 	run_panadaptertask=false;
 

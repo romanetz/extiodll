@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include "ExtIODll.h"
 #include "ExtIODialog.h"
+#include "MainDialog.h"
 #include "SelectComPort\ComPortCombo.h"
 #include "serial\serial.h"
 #include "libusb\lusb0_usb.h"
@@ -25,10 +26,12 @@ extern int SyncGain;
 extern unsigned long lo_freq;
 extern unsigned long lastlo_freqA;
 extern unsigned long lastlo_freqB;
+extern unsigned long lastlo_freqC;
 
 extern unsigned long tune_freq;
 extern unsigned long lasttune_freqA;
 extern unsigned long lasttune_freqB;
+extern unsigned long lasttune_freqC;
 
 volatile bool channelmode_changed=false;		// set true to have datatask changing the channel mode (by sending USB control message to radio)
 volatile bool samplerate_changed=false;			// set true to ask datatask to change sample rate for radio
@@ -36,21 +39,32 @@ volatile bool update_lo=false;					// trigger LO change on datatask
 
 extern volatile bool update_registry;
 extern volatile bool update_phaseA;
-extern volatile bool update_gain;
+extern volatile bool update_IFgain;
+extern volatile bool update_RFgain;
 extern volatile bool do_callback105;
 
 extern long IQSampleRate;
 long last_samplerate;
 
-extern int GainA, GainB;
+extern int IFGainA, IFGainB;
+extern int RFGainA, RFGainB;
+
+extern int AGC;
+
 extern int PhaseCoarse, PhaseFine;
+unsigned long phaseword=0;
 extern int DebugConsole;
 
 extern const struct usb_version* libver;
 
 CPanadapterDialog* m_pmodelessPanadapter = NULL;
 
+extern CMainDialog* m_pmodeless;
 extern CWnd* MainWindow;
+
+int Transparency=0;
+int fw_major=-1, fw_minor=0, extio_major=DLLVER_MAJOR, extio_minor=DLLVER_MINOR;
+char verinfo[128];
 
 // CExtIODialog dialog
 
@@ -70,8 +84,8 @@ void CExtIODialog::DoDataExchange(CDataExchange* pDX)
 {
 	CDialog::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_COMBO1, m_comboPorts);
-	DDX_Control(pDX, IDC_SLIDER1, m_GainSliderA);
-	DDX_Control(pDX, IDC_SLIDER2, m_GainSliderB);
+	DDX_Control(pDX, IDC_SLIDER1, m_IFGainSliderA);
+	DDX_Control(pDX, IDC_SLIDER2, m_IFGainSliderB);
 	DDX_Control(pDX, IDC_SLIDER3, m_PhaseSliderCoarse);
 	DDX_Control(pDX, IDC_SLIDER4, m_PhaseSliderFine);
 	DDX_Control(pDX, IDC_EDIT1, m_PhaseInfo);
@@ -81,6 +95,9 @@ void CExtIODialog::DoDataExchange(CDataExchange* pDX)
 	DDX_Radio(pDX, IDC_RADIO_CMODE1, m_nChannelMode);
 	DDX_Control(pDX, IDC_CHECK2, m_SyncGainCheck);
 	DDX_Control(pDX, IDC_CHECK3, m_SyncTuneCheck);
+	DDX_Control(pDX, IDC_CHECK5, m_AGCCheck);
+	DDX_Control(pDX, IDC_SLIDER6, m_RFGainSliderA);
+	DDX_Control(pDX, IDC_SLIDER7, m_RFGainSliderB);
 	DDX_Control(pDX, IDC_CHECK4, m_DebugConsoleCheck);
 	DDX_Control(pDX, IDC_BUTTON1, m_Button1);
 }
@@ -95,6 +112,7 @@ BEGIN_MESSAGE_MAP(CExtIODialog, CDialog)
 	ON_BN_CLICKED(IDC_CHECK2, &CExtIODialog::OnBnClickedCheck2)
 	ON_BN_CLICKED(IDC_CHECK3, &CExtIODialog::OnBnClickedCheck3)
 	ON_BN_CLICKED(IDC_CHECK4, &CExtIODialog::OnBnClickedCheck4)
+	ON_BN_CLICKED(IDC_CHECK5, &CExtIODialog::OnBnClickedCheck5)
 	ON_WM_HSCROLL()
 	ON_WM_TIMER()			// we need timer to do periodic updates on dialog window. Doing it by accessing contols from different task directly corrupts something
 	ON_BN_CLICKED(IDC_RADIO_CMODE1, &CExtIODialog::OnBnClickedRadioCmode1)
@@ -104,19 +122,122 @@ BEGIN_MESSAGE_MAP(CExtIODialog, CDialog)
 	ON_BN_CLICKED(IDC_RADIO_CMODE5, &CExtIODialog::OnBnClickedRadioCmode5)
 	ON_BN_CLICKED(IDC_RADIO_CMODE6, &CExtIODialog::OnBnClickedRadioCmode6)
 	ON_BN_CLICKED(IDC_RADIO_CMODE7, &CExtIODialog::OnBnClickedRadioCmode7)
+	ON_BN_CLICKED(IDC_RADIO_CMODE8, &CExtIODialog::OnBnClickedRadioCmode8)
 END_MESSAGE_MAP()
+
+
+//
+// "Decision Engine" for enabling and disabling the controls dependednt on the UI selections
+//
+
+void CExtIODialog::EnableDisableControls(void)
+{	
+	if (m_DllIQ.GetCheck())			
+	{
+		// in IQ mode we could have all possible controls active, so enable all!
+		GetDlgItem(IDC_RADIO_CMODE1)->EnableWindow(true);
+		GetDlgItem(IDC_RADIO_CMODE2)->EnableWindow(true);
+		GetDlgItem(IDC_RADIO_CMODE3)->EnableWindow(true);
+		GetDlgItem(IDC_RADIO_CMODE4)->EnableWindow(true);
+		GetDlgItem(IDC_RADIO_CMODE5)->EnableWindow(true);
+		GetDlgItem(IDC_RADIO_CMODE6)->EnableWindow(true);
+		GetDlgItem(IDC_RADIO_CMODE7)->EnableWindow(true);
+		GetDlgItem(IDC_RADIO_CMODE8)->EnableWindow(true);
+	}
+	else
+	{
+		// override global channel mode if data is not supplied by ExtIO DLL
+		if ((m_nChannelMode != CHMODE_A)&&(m_nChannelMode!=CHMODE_AMB))
+			m_nChannelMode=CHMODE_A;
+
+		//in non-extio mode disable modes we can not use
+		GetDlgItem(IDC_RADIO_CMODE1)->EnableWindow(true);
+		GetDlgItem(IDC_RADIO_CMODE2)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE3)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE4)->EnableWindow(true);
+		GetDlgItem(IDC_RADIO_CMODE5)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE6)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE7)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE8)->EnableWindow(false);
+	}
+
+	// only enable panadapter if firmware version supports it
+	if ((fw_major < MIN_FW_MAJOR_PAN)||(fw_minor < MIN_FW_MINOR_PAN) || (fw_major == 256)) //1.58 had wrong endian for version info, so check for 256 major
+	{
+		if ((m_nChannelMode == CHMODE_ABPAN)||(m_nChannelMode == CHMODE_BAPAN))
+			m_nChannelMode=CHMODE_A;
+
+		GetDlgItem(IDC_RADIO_CMODE6)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE7)->EnableWindow(false);
+		GetDlgItem(IDC_RADIO_CMODE8)->EnableWindow(false);
+	}
+
+	//enable all buttons and sliders by default
+
+	m_SyncGainCheck.EnableWindow(true);
+	m_SyncTuneCheck.EnableWindow(true);
+	m_AGCCheck.EnableWindow(true);
+	m_IFGainSliderA.EnableWindow(true);
+	m_IFGainSliderB.EnableWindow(true);
+	m_RFGainSliderA.EnableWindow(true);
+	m_RFGainSliderB.EnableWindow(true);
+	m_PhaseSliderCoarse.EnableWindow(true);
+	m_PhaseSliderFine.EnableWindow(true);
+	m_Button1.EnableWindow(true);
+	
+	switch(m_nChannelMode)
+	{
+	case CHMODE_A:
+	case CHMODE_B:		
+		m_Button1.EnableWindow(false);
+		break;
+
+	case CHMODE_APB:
+	case CHMODE_AMB:
+	case CHMODE_BMA:			
+		m_SyncTuneCheck.EnableWindow(false);	// always fix tuning for diversity modes, so no selection
+		m_Button1.EnableWindow(false);			// no panadapter in diversity mode
+		break;
+
+	case CHMODE_ABPAN:
+	case CHMODE_BAPAN:
+		m_SyncTuneCheck.EnableWindow(false);	// second channel tuning is done internally
+		//m_SyncGainCheck.EnableWindow(false);	// This is relly irrleevant and we COULD sync gain, although it does not really make sense
+		m_Button1.EnableWindow(true);			// Panadapter can be selected
+		break;
+
+	case CHMODE_IABQ:
+		m_SyncTuneCheck.EnableWindow(false);	// Both channels have to be same frequency, so disable selection
+		m_SyncGainCheck.EnableWindow(false);	// Both channels have to be same gain, so disable channel B gain
+		m_RFGainSliderB.EnableWindow(false);
+		m_IFGainSliderB.EnableWindow(false);
+		m_PhaseSliderCoarse.EnableWindow(false);		
+		m_PhaseSliderFine.EnableWindow(false);
+
+		break;
+	}
+
+	if (m_AGCCheck.GetCheck())
+	{
+		m_RFGainSliderA.EnableWindow(false);		//AGC, so no manual RF gain adjustment
+		m_RFGainSliderB.EnableWindow(false);
+	}
+
+	if (m_SyncGainCheck.GetCheck())
+	{
+		m_IFGainSliderB.EnableWindow(false);		//AGC, so no manual RF gain adjustment
+		m_RFGainSliderB.EnableWindow(false);
+	}
+
+	UpdateData(false);			//update radio buttons
+}
 
 
 // CExtIODialog message handlers
 
-int Transparency=0;
-int fw_major=-1, fw_minor=0, extio_major=DLLVER_MAJOR, extio_minor=DLLVER_MINOR;
-char verinfo[128];
-
 BOOL CExtIODialog::OnInitDialog()
 {
 int ret;
-int hardwaretype;
 
 	CDialog::OnInitDialog();
 
@@ -145,13 +266,21 @@ int hardwaretype;
 	//    m_listPorts.InitList(strPort.GetString());
 
 	// init sliders
-	m_GainSliderA.SetRange(0, 15);
-	m_GainSliderA.SetPos(GainA);
-	m_GainSliderA.SetTicFreq(1);
+	m_IFGainSliderA.SetRange(0, 15);
+	m_IFGainSliderA.SetPos(IFGainA);
+	m_IFGainSliderA.SetTicFreq(1);
 
-	m_GainSliderB.SetRange(0, 15);
-	m_GainSliderB.SetPos(GainB);
-	m_GainSliderB.SetTicFreq(1);
+	m_IFGainSliderB.SetRange(0, 15);
+	m_IFGainSliderB.SetPos(IFGainB);
+	m_IFGainSliderB.SetTicFreq(1);
+
+	m_RFGainSliderA.SetRange(0, 7);
+	m_RFGainSliderA.SetPos(RFGainA);
+	m_RFGainSliderA.SetTicFreq(1);
+
+	m_RFGainSliderB.SetRange(0, 7);
+	m_RFGainSliderB.SetPos(RFGainB);
+	m_RFGainSliderB.SetTicFreq(1);
 
 	m_PhaseSliderCoarse.SetRange(0, 359);	
 	m_PhaseSliderCoarse.SetTicFreq(10);
@@ -170,11 +299,20 @@ int hardwaretype;
 	m_PhaseInfo.SetWindowText("0.0");
 	m_DataRateInfo.SetWindowText("0 Mbit/s");
 
-	hardwaretype=AfxGetApp()->GetProfileInt(_T("Config"), _T("HardwareType"), -1);
-	if (hardwaretype == 3)
+	m_nChannelMode=AfxGetApp()->GetProfileInt(_T("Config"), _T("ChannelMode"), 0);
+
+	if (HWType == 3)
 		m_DllIQ.SetCheck(BST_CHECKED);
-	else
-		m_DllIQ.SetCheck(BST_UNCHECKED);
+	else	
+		m_DllIQ.SetCheck(BST_UNCHECKED);		
+
+	SyncTuning=AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncTuning"), 0);
+	SyncGain=AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncGain"), 0);
+
+	m_SyncGainCheck.SetCheck(SyncGain);
+	m_SyncTuneCheck.SetCheck(SyncTuning);
+
+	m_AGCCheck.SetCheck(AGC);
 
 	SetTimer(ID_CLOCK_TIMER, 500, NULL);		//500ms timer, null show put it to task queue
 
@@ -228,65 +366,12 @@ int hardwaretype;
 		sprintf_s(verinfo, 128, "No LibUSB-win32 Version Info");
 
 	GetDlgItem(IDC_STATIC_LIBUSBVER)->SendMessage(WM_SETTEXT, 0, (LPARAM)verinfo);
+	
+	m_DebugConsoleCheck.SetCheck(DebugConsole);
 
-	m_nChannelMode=AfxGetApp()->GetProfileInt(_T("Config"), _T("ChannelMode"), 0);
-
-	// override channel mode if data is not supplied by ExtIO DLL
-	if (hardwaretype != 3)
-	{
-		if ((m_nChannelMode != CHMODE_A)&&(m_nChannelMode!=CHMODE_AMB))
-			m_nChannelMode=CHMODE_A;
-
-		// disable radio buttons what should not be used
-
-		GetDlgItem(IDC_RADIO_CMODE2)->EnableWindow(false);
-		GetDlgItem(IDC_RADIO_CMODE3)->EnableWindow(false);
-		GetDlgItem(IDC_RADIO_CMODE5)->EnableWindow(false);
-		GetDlgItem(IDC_RADIO_CMODE6)->EnableWindow(false);
-		GetDlgItem(IDC_RADIO_CMODE7)->EnableWindow(false);
-	}
-
-	// only enable panadapter if firmware version supports it
-	if ((fw_major < MIN_FW_MAJOR_PAN)||(fw_minor < MIN_FW_MINOR_PAN) || (fw_major == 256)) //1.58 had wrong endian for version info, so check for 256 major
-	{
-		if ((m_nChannelMode >=5)&&(m_nChannelMode <=6))
-			m_nChannelMode=CHMODE_A;
-
-		GetDlgItem(IDC_RADIO_CMODE6)->EnableWindow(false);
-		GetDlgItem(IDC_RADIO_CMODE7)->EnableWindow(false);
-	}
-
-	m_SyncGainCheck.SetCheck(AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncGain"), 0));
-
-	if ((m_nChannelMode > 1)&&(m_nChannelMode < 5))		// fix tuning for diversity modes
-	{
-		m_SyncTuneCheck.SetCheck(1);
-		m_SyncTuneCheck.EnableWindow(false);
-		m_Button1.EnableWindow(false);
-	}
-	else if (m_nChannelMode <= 1)
-	{
-		m_SyncTuneCheck.SetCheck(AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncTuning"), 0));
-		m_Button1.EnableWindow(false);
-	}
-	else if ((m_nChannelMode >= 5)&&(m_nChannelMode <= 6))
-	{
-		m_SyncTuneCheck.SetCheck(0);
-		m_SyncTuneCheck.EnableWindow(false);
-		m_SyncGainCheck.SetCheck(0);
-		m_SyncGainCheck.EnableWindow(false);
-
-		SyncTuning=0;
-		SyncGain=0;
-
-		m_Button1.EnableWindow(true);
-	}
-
-	UpdateData(false);			//update radio buttons
+	EnableDisableControls();
 
 	last_samplerate=IQSampleRate;
-
-	m_DebugConsoleCheck.SetCheck(DebugConsole);
 
 	return true;
 }
@@ -294,20 +379,25 @@ int hardwaretype;
 
 void CExtIODialog::OnBnClickedOk()
 {
-	update_registry=true;		// ask ExtIORegistryUpdate() to perform update
-	OnOK();
+	update_registry=true;				// ask ExtIORegistryUpdate() to perform update
+	//OnOK();
+	//Ask main window to close
+
+	m_pmodeless->PostMessage(WM_CLOSE, 0, 0);
 }
 
-extern CExtIODialog* m_pmodeless;
+//extern CExtIODialog* m_pmodeless;
+//extern CMainDialog* m_pmodeless;
 
 
 void CExtIODialog::PostNcDestroy()
 {
 	CDialog::PostNcDestroy();	
-	m_pmodeless = NULL;		
+	//m_pmodeless = NULL;		//xx
 	delete this;
 }
 
+/*
 // We have to handle close event, as we do not have parent object what would perform destruction for us
 void CExtIODialog::OnClose()
 {
@@ -322,8 +412,10 @@ void CExtIODialog::OnClose()
 	if (m_pmodeless)
 	{
 		m_pmodeless->DestroyWindow();
+		m_pmodeless=NULL;		//xx
 	}
 }
+*/
 
 // WM_DEVICECHANGE handler.
 // Used here to detect plug-in and -out of devices providing virtual COM ports.
@@ -386,12 +478,16 @@ void CExtIODialog::OnBnClickedCheck1()
 {
 	if (m_DllIQ.GetCheck())
 	{
-		AfxGetApp()->WriteProfileInt(_T("Config"), _T("HardwareType"), 3);		// 16-bit ExtIODll managed I/Q source		
+		AfxGetApp()->WriteProfileInt(_T("Config"), _T("HardwareType"), 3);		// 16-bit ExtIODll managed I/Q source	
+		HWType=3;
 	}
 	else
 	{
 		AfxGetApp()->WriteProfileInt(_T("Config"), _T("HardwareType"), 4);		// Audio card managed by HDSDR
+		HWType=4;
 	}
+
+	EnableDisableControls();
 
 	AfxMessageBox("I/Q Data Source Changed, Restart Application!", MB_ICONEXCLAMATION);
 }
@@ -408,13 +504,15 @@ void CExtIODialog::OnBnClickedCheck2()
 	// if sync gain is checked, sync both gains to Ch A gain
 	if (SyncGain)
 	{
-		GainB=GainA;
-		m_GainSliderB.EnableWindow(false);
-		m_GainSliderB.SetPos(GainB);
-		update_gain=true;		// ask datatask to update gain
+		IFGainB=IFGainA;
+		RFGainB=RFGainA;
+		m_IFGainSliderB.SetPos(IFGainB);
+		m_RFGainSliderB.SetPos(RFGainB);
+		update_IFgain=true;		// ask datatask to update gain
+		update_RFgain=true;
 	}
-	else
-		m_GainSliderB.EnableWindow(true);
+
+	EnableDisableControls();
 }
 
 void CExtIODialog::OnBnClickedCheck3()
@@ -431,6 +529,8 @@ void CExtIODialog::OnBnClickedCheck3()
 		update_lo=true;
 		do_callback105=true;
 	}
+
+	EnableDisableControls();
 }
 
 void CExtIODialog::OnBnClickedCheck4()
@@ -442,114 +542,143 @@ void CExtIODialog::OnBnClickedCheck4()
 		AfxMessageBox("Restart Application to Disable Debug Console!", MB_ICONEXCLAMATION);
 }
 
+void CExtIODialog::OnBnClickedCheck5()
+{
+	AGC=m_AGCCheck.GetCheck();
+	
+	AfxGetApp()->WriteProfileInt(_T("Config"), _T("AGC"), AGC);
+
+	EnableDisableControls();			//enable and isable appropriate controls dependent on new state of buttons
+
+	//disable AGC and set gain according to gain sliders
+
+	update_RFgain=true;
+}
+
 void CExtIODialog::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
 {
-unsigned long phaseword;
+//unsigned long phaseword;
 CSliderCtrl* pSld;
 
 	pSld = (CSliderCtrl*)pScrollBar;
 
-	if (*pSld == m_GainSliderA)
+	if (*pSld == m_RFGainSliderA)
 	{
-		GainA = m_GainSliderA.GetPos();
+		RFGainA = m_RFGainSliderA.GetPos();
+		if (SyncGain)
+		{
+			RFGainB = RFGainA;
+			m_RFGainSliderB.SetPos(RFGainB);
+		}
+
+		update_RFgain=true;
+	}
+	else if (*pSld == m_RFGainSliderB)
+	{
+		RFGainB = m_RFGainSliderB.GetPos();
+		update_RFgain=true;
+	}
+	else if (*pSld == m_IFGainSliderA)
+	{
+		IFGainA = m_IFGainSliderA.GetPos();
 		
 		if (HWType != 3)
 		{
-			sprintf_s(serbuff, 128, "_ga %d\n\r", GainA);
+			sprintf_s(serbuff, 128, "_ga %d\n\r", IFGainA);
 			serial.Write(serbuff, strlen(serbuff));
 		}
 		else
-			update_gain=true;
+			update_IFgain=true;
 
 		if (SyncGain)
 		{
-			GainB = GainA;
-			m_GainSliderB.SetPos(GainB);
+			IFGainB = IFGainA;
+			m_IFGainSliderB.SetPos(IFGainB);
 		}
 		else
 		{
-			if (GainA > 7)
+			if (IFGainA > 7)
 			{
 				//gains higher than 7 mean, that exponent is going to be fixed for both channels, so move the 
 				//channel B slider accordingly
 				
-				if (m_GainSliderB.GetPos() < 8)
+				if (m_IFGainSliderB.GetPos() < 8)
 				{
-					GainB=8;
+					IFGainB=8;
 					if (HWType !=3)
 					{
 						sprintf_s(serbuff, 128, "_gb 8\n\r");
 						serial.Write(serbuff, strlen(serbuff));
 					}
 					else
-						update_gain=true;
+						update_IFgain=true;
 
-					m_GainSliderB.SetPos(GainB);
+					m_IFGainSliderB.SetPos(IFGainB);
 				}
 			}
 			else
 			{
-				if (m_GainSliderB.GetPos() > 7)
+				if (m_IFGainSliderB.GetPos() > 7)
 				{
-					GainB=7;
+					IFGainB=7;
 					if (HWType != 3)
 					{
 						sprintf_s(serbuff, 128, "_gb 7\n\r");
 						serial.Write(serbuff, strlen(serbuff));
 					}
 					else
-						update_gain=true;
+						update_IFgain=true;
 
-					m_GainSliderB.SetPos(GainB);
+					m_IFGainSliderB.SetPos(IFGainB);
 				}
 			}	
 		}
 	}
-	else if ((*pSld == m_GainSliderB) || (SyncGain))
+	else if ((*pSld == m_IFGainSliderB) || ((*pSld == m_IFGainSliderA)&&(SyncGain)))
 	{
-		GainB = m_GainSliderB.GetPos();
+		IFGainB = m_IFGainSliderB.GetPos();
 		
 		if (HWType != 3)
 		{
-			sprintf_s(serbuff, 128, "_gb %d\n\r", GainB);
+			sprintf_s(serbuff, 128, "_gb %d\n\r", IFGainB);
 			serial.Write(serbuff, strlen(serbuff));
 		}
 		else
-			update_gain=true;
+			update_IFgain=true;
 
-		if (GainB > 7)
+		if (IFGainB > 7)
 		{
 			//gains higher than 7 mean that exponent is going to be fixed for both channels, so move the 
 			//channel B slider accordingly
 			
-			if (m_GainSliderA.GetPos() < 8)
+			if (m_IFGainSliderA.GetPos() < 8)
 			{
-				GainA=8;
+				IFGainA=8;
 				if (HWType != 3)
 				{
 					sprintf_s(serbuff, 128, "_ga 8\n\r");
 					serial.Write(serbuff, strlen(serbuff));
 				}
 				else
-					update_gain=true;
+					update_IFgain=true;
 
-				m_GainSliderA.SetPos(GainA);
+				m_IFGainSliderA.SetPos(IFGainA);
 			}
 		}
 		else
 		{
-			if (m_GainSliderA.GetPos() > 7)
+			if (m_IFGainSliderA.GetPos() > 7)
 			{
-				GainA=7;
+				IFGainA=7;
 				if (HWType != 3)
 				{
 					sprintf_s(serbuff, 128, "_ga 7\n\r");
 					serial.Write(serbuff, strlen(serbuff));
 				}
 				else
-					update_gain=true;
+					update_IFgain=true;
 
-				m_GainSliderA.SetPos(GainA);
+				m_IFGainSliderA.SetPos(IFGainA);
 			}
 		}
 	}
@@ -561,14 +690,15 @@ CSliderCtrl* pSld;
 		sprintf_s(serbuff, 128, "%d.%d", PhaseCoarse+(PhaseFine/100), PhaseFine%100);
 		m_PhaseInfo.SetWindowText(serbuff);
 
-		// calculate phase word from the sliders		
+		// update global phaseword
+		// calculate phase word from the sliders. All math is in deg*100		
+
+		phaseword=18204;	//65535=2pi rad = 360deg; 65535/360*100
+		phaseword*=(PhaseCoarse*100)+PhaseFine;
+		phaseword/=100*100;
 
 		if (HWType != 3)
 		{
-			phaseword=1820;	//65535=2pi rad = 360deg; 65535/360*1000
-			phaseword*=(PhaseCoarse*100)+PhaseFine;
-			phaseword/=1000;
-
 			sprintf_s(serbuff, 128, "_pa %ld\n\r", phaseword);
 			serial.Write(serbuff, strlen(serbuff));
 		}
@@ -620,25 +750,22 @@ unsigned long tunefreq;
 
 		SyncTuning=AfxGetApp()->GetProfileInt(_T("Config"), _T("SyncTuning"), 0);
 		m_SyncTuneCheck.SetCheck(SyncTuning);
-		m_SyncTuneCheck.EnableWindow(true);
 		m_SyncGainCheck.SetCheck(SyncGain);
-		m_SyncGainCheck.EnableWindow(true);
+
 		if (HWType == 3)
 			IQSampleRate=IQSAMPLERATE_FULL;
 
-		m_Button1.EnableWindow(false);
 		break;
 
 	case CHMODE_APB:
 	case CHMODE_AMB:
 	case CHMODE_BMA:			// fix tuning for diversity modes
 
-		m_SyncTuneCheck.SetCheck(1);
-		m_SyncTuneCheck.EnableWindow(false);
-		m_SyncGainCheck.SetCheck(SyncGain);
-		m_SyncGainCheck.EnableWindow(true);
-
 		SyncTuning=1;
+
+		m_SyncTuneCheck.SetCheck(SyncTuning);
+		m_SyncGainCheck.SetCheck(SyncGain);
+		
 		if (HWType == 3)
 			IQSampleRate=IQSAMPLERATE_DIVERSITY;
 
@@ -648,33 +775,62 @@ unsigned long tunefreq;
 	case CHMODE_ABPAN:
 	case CHMODE_BAPAN:
 
-		m_SyncTuneCheck.SetCheck(0);
-		m_SyncTuneCheck.EnableWindow(false);
-		m_SyncGainCheck.SetCheck(0);
-		m_SyncGainCheck.EnableWindow(false);
-
 		SyncTuning=0;
 		SyncGain=0;
+
+		m_SyncTuneCheck.SetCheck(SyncTuning);
+		m_SyncGainCheck.SetCheck(SyncGain);
 
 		if (HWType == 3)
 			IQSampleRate=IQSAMPLERATE_PANADAPTER;
 
-		m_Button1.EnableWindow(true);
+		break;
+
+	case CHMODE_IABQ:
+
+		SyncTuning=1;
+		SyncGain=1;
+		PhaseCoarse=0;
+		PhaseFine=0;
+
+		IFGainB=IFGainA;
+		RFGainB=RFGainA;
+
+		m_SyncTuneCheck.SetCheck(1);
+		m_SyncGainCheck.SetCheck(1);
+
+		m_IFGainSliderB.SetPos(IFGainA);
+		m_RFGainSliderB.SetPos(RFGainA);
+		m_PhaseSliderCoarse.SetPos(PhaseCoarse);
+		m_PhaseSliderFine.SetPos(PhaseFine);
+
+		if (HWType == 3)
+			IQSampleRate=IQSAMPLERATE_FULL;
+
+		m_Button1.EnableWindow(false);
 		break;
 	
 	default:			// should not get here
 		break;	
 	}
-
-	if (SyncTuning)				// override frequencies with channel A if synchronous tuning is selected!
-	{
-		lofreq=lastlo_freqA;
-		tunefreq=lasttune_freqA;
-	}
-	else
+	
+	if (ChannelMode == CHMODE_IABQ)
 	{
 		lofreq=_lofreq;
 		tunefreq=_tunefreq;
+	}
+	else
+	{
+		if (SyncTuning)				// override frequencies with channel A if synchronous tuning is selected!
+		{
+			lofreq=lastlo_freqA;
+			tunefreq=lasttune_freqA;
+		}
+		else
+		{
+			lofreq=_lofreq;
+			tunefreq=_tunefreq;
+		}
 	}
 
 	if ((long)lofreq !=-1)
@@ -692,7 +848,7 @@ unsigned long tunefreq;
 
 	if (HWType != 3)
 	{
-		if (ChannelMode == 0)
+		if (ChannelMode == CHMODE_A)		//ChA / soundcard
 			sprintf_s(serbuff, 128, "diversity 0\n\r");
 		else
 			sprintf_s(serbuff, 128, "diversity 1\n\r");
@@ -712,6 +868,13 @@ unsigned long tunefreq;
 		last_samplerate=IQSampleRate;
 		samplerate_changed=true;	// indicate datatask, that sample rate must be changed
 	}
+
+	// update phase and gain settings after mode change to whatever they should be
+	update_IFgain=true;
+	update_RFgain=true;
+	update_phaseA=true;
+
+	EnableDisableControls();
 }
 
 void CExtIODialog::OnBnClickedRadioCmode1()		//A
@@ -749,6 +912,11 @@ void CExtIODialog::OnBnClickedRadioCmode7()		//B+Panadapter
 	ChangeMode(lastlo_freqB, lasttune_freqB);
 }
 
+void CExtIODialog::OnBnClickedRadioCmode8()		//A=I, B=Q
+{
+	ChangeMode(lastlo_freqC, lasttune_freqC);
+}
+
 void CExtIODialog::OnBnClickedButton1()
 {
 	if(m_pmodelessPanadapter)
@@ -762,7 +930,7 @@ void CExtIODialog::OnBnClickedButton1()
 
 		if (m_pmodelessPanadapter)
 		{
-			m_pmodelessPanadapter->Create(/*CGenericMFCDlg*/CPanadapterDialog::IDD, CWnd::GetActiveWindow() /*MainWindow*/ /*GetDesktopWindow()*/);
+			m_pmodelessPanadapter->Create(/*CGenericMFCDlg*/CPanadapterDialog::IDD, /*CWnd::GetActiveWindow()*/ MainWindow /*GetDesktopWindow()*/);
 			m_pmodelessPanadapter->ShowWindow(SW_SHOW);
 		}
 		else
@@ -771,3 +939,4 @@ void CExtIODialog::OnBnClickedButton1()
 		}
 	}
 }
+
