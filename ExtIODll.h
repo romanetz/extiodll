@@ -25,6 +25,10 @@ public:
 	CExtIODllApp();
 
 // Overrides
+
+public:
+    virtual BOOL InitInstance();
+	virtual int ExitInstance();
 	// ClassWizard generated virtual function overrides
 	//{{AFX_VIRTUAL(CMyDllApp)
 	//}}AFX_VIRTUAL

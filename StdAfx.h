@@ -35,6 +35,9 @@
 #include <afxcmn.h>			// MFC support for Windows Common Controls
 #endif // _AFX_NO_AFXCMN_SUPPORT
 
+//stdafx.h is sure to be loaded for all source files, so this is a good place to have this.
+#include "memwatch-2.71\\memwatch.h"
+
 
 //{{AFX_INSERT_LOCATION}}
 // Microsoft Visual C++ will insert additional declarations immediately before the previous line.

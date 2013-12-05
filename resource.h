@@ -3,20 +3,28 @@
 // Used by ExtIODll.rc
 //
 #define IDD_DIALOG1                     5000
+#define IDD_EXTIODIALOG                 5000
 #define IDC_COMBO1                      5001
 #define IDC_SLIDER1                     5002
 #define IDB_BITMAP1                     5003
 #define IDC_SLIDER2                     5003
 #define IDD_DIALOG2                     5004
+#define IDC_SLIDER6                     5004
+#define IDD_PANADAPTERDIALOG            5004
 #define IDC_SLIDER3                     5005
+#define IDD_DIALOG3                     5005
+#define IDD_MAINDIALOG                  5005
 #define IDC_SLIDER4                     5006
 #define IDC_EDIT1                       5007
+#define IDD_ADVANCEDDIALOG              5007
 #define IDC_SLIDER5                     5008
 #define IDC_EDIT2                       5009
 #define IDC_CHECK1                      5010
+#define IDC_SLIDER7                     5011
 #define IDC_STATIC_TEST                 5012
 #define IDC_STATIC_EXTIOVER             5013
 #define IDC_STATIC_FWVER                5014
+#define IDR_HTML_ADVANCEDDIALOG         5015
 #define IDC_RADIO_CMODE1                5016
 #define IDC_RADIO_CMODE2                5017
 #define IDC_RADIO_CMODE3                5018
@@ -29,17 +37,20 @@
 #define IDC_RADIO_CMODE6                5025
 #define IDC_RADIO_CMODE7                5026
 #define IDC_BUTTON1                     5027
+#define IDC_RADIO_CMODE8                5028
 #define IDC_CUSTOM1                     5030
 #define IDC_CUSTOM2                     5031
 #define IDC_WATERFALL                   5032
+#define IDC_CHECK5                      5033
+#define IDC_TAB1                        5034
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        5007
+#define _APS_NEXT_RESOURCE_VALUE        5008
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         5033
-#define _APS_NEXT_SYMED_VALUE           5009
+#define _APS_NEXT_CONTROL_VALUE         5035
+#define _APS_NEXT_SYMED_VALUE           5016
 #endif
 #endif
